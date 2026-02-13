@@ -38,9 +38,9 @@ async def lifespan(app: FastAPI):
     # STARTUP
     logger.info("🚀 Iniciando SuvFin...")
 
-    if settings.APP_ENV == "development":
-        logger.info("🔧 Modo desenvolvimento — criando tabelas...")
-        await init_db()
+    # Garantir que as tabelas existam (create_all é idempotente)
+    logger.info("🔧 Verificando/criando tabelas no banco...")
+    await init_db()
 
     # Seed categorias padrão
     category_service = CategoryService()
