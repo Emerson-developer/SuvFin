@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SuvFin — Upgrade Premium 🥑</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a3e 50%, #0d3320 100%);
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 480px;
+            width: 100%;
+            padding: 20px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.06);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 40px 32px;
+            text-align: center;
+        }
+
+        .logo {
+            font-size: 48px;
+            margin-bottom: 8px;
+        }
+
+        .brand {
+            font-size: 28px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #56ab2f, #a8e063);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 4px;
+        }
+
+        .subtitle {
+            color: #a0a0b0;
+            font-size: 14px;
+            margin-bottom: 32px;
+        }
+
+        .price-card {
+            background: linear-gradient(135deg, #1b5e20, #2e7d32);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .price-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -30%;
+            width: 200px;
+            height: 200px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 50%;
+        }
+
+        .plan-name {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .price {
+            font-size: 42px;
+            font-weight: 800;
+        }
+
+        .price .currency {
+            font-size: 20px;
+            vertical-align: super;
+        }
+
+        .price .cents {
+            font-size: 20px;
+        }
+
+        .price-note {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 13px;
+            margin-top: 4px;
+        }
+
+        .features {
+            text-align: left;
+            margin-bottom: 28px;
+        }
+
+        .feature {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            font-size: 15px;
+            color: #d0d0e0;
+        }
+
+        .feature:last-child {
+            border-bottom: none;
+        }
+
+        .feature .icon {
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .comparison {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 28px;
+            gap: 12px;
+        }
+
+        .plan-col {
+            flex: 1;
+            padding: 16px 12px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .plan-col.trial {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .plan-col.premium {
+            background: rgba(56, 171, 47, 0.15);
+            border: 1px solid rgba(56, 171, 47, 0.3);
+        }
+
+        .plan-col h4 {
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+            color: #a0a0b0;
+        }
+
+        .plan-col.premium h4 {
+            color: #a8e063;
+        }
+
+        .plan-col .limit {
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .plan-col .limit-label {
+            font-size: 12px;
+            color: #808090;
+        }
+
+        .btn-upgrade {
+            display: block;
+            width: 100%;
+            padding: 16px 32px;
+            background: linear-gradient(135deg, #56ab2f, #a8e063);
+            color: #0a2e0a;
+            font-size: 17px;
+            font-weight: 800;
+            border: none;
+            border-radius: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            text-align: center;
+        }
+
+        .btn-upgrade:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(86, 171, 47, 0.35);
+        }
+
+        .btn-upgrade:active {
+            transform: translateY(0);
+        }
+
+        .btn-upgrade.loading {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        .pix-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.06);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            color: #a0a0b0;
+            margin-top: 16px;
+        }
+
+        .secure {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #606070;
+        }
+
+        .error-msg {
+            background: rgba(244, 67, 54, 0.15);
+            border: 1px solid rgba(244, 67, 54, 0.3);
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            display: none;
+            font-size: 14px;
+            color: #ff8a80;
+        }
+
+        .success-card {
+            display: none;
+        }
+
+        .success-card .icon-large {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+
+        .success-card h2 {
+            font-size: 24px;
+            margin-bottom: 8px;
+            color: #a8e063;
+        }
+
+        .success-card p {
+            color: #a0a0b0;
+            font-size: 15px;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 400px) {
+            .card { padding: 28px 20px; }
+            .price { font-size: 36px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card" id="upgrade-card">
+            <div class="logo">🥑</div>
+            <div class="brand">SuvFin Premium</div>
+            <div class="subtitle">Suas finanças no WhatsApp, sem limites</div>
+
+            <div class="price-card">
+                <div class="plan-name">Plano Premium</div>
+                <div class="price">
+                    <span class="currency">R$</span> 9<span class="cents">,90</span>
+                </div>
+                <div class="price-note">Pagamento único via PIX</div>
+            </div>
+
+            <div class="comparison">
+                <div class="plan-col trial">
+                    <h4>Trial</h4>
+                    <div class="limit">50</div>
+                    <div class="limit-label">lançamentos</div>
+                </div>
+                <div class="plan-col premium">
+                    <h4>Premium</h4>
+                    <div class="limit">∞</div>
+                    <div class="limit-label">ilimitados</div>
+                </div>
+            </div>
+
+            <div class="features">
+                <div class="feature">
+                    <span class="icon">✅</span>
+                    <span>Lançamentos ilimitados</span>
+                </div>
+                <div class="feature">
+                    <span class="icon">📊</span>
+                    <span>Relatórios avançados por categoria</span>
+                </div>
+                <div class="feature">
+                    <span class="icon">📸</span>
+                    <span>Processamento de comprovantes por IA</span>
+                </div>
+                <div class="feature">
+                    <span class="icon">📅</span>
+                    <span>Histórico completo de transações</span>
+                </div>
+                <div class="feature">
+                    <span class="icon">💬</span>
+                    <span>Suporte prioritário</span>
+                </div>
+                <div class="feature">
+                    <span class="icon">🔒</span>
+                    <span>Dados protegidos e criptografados</span>
+                </div>
+            </div>
+
+            <div class="error-msg" id="error-msg"></div>
+
+            <button class="btn-upgrade" id="btn-upgrade" onclick="generatePayment()">
+                Fazer upgrade agora 🚀
+            </button>
+
+            <div class="pix-badge">
+                <span>⚡</span>
+                <span>Pagamento instantâneo via PIX</span>
+            </div>
+
+            <div class="secure">
+                🔐 Pagamento seguro processado por AbacatePay
+            </div>
+        </div>
+
+        <!-- Tela de sucesso -->
+        <div class="card success-card" id="success-card">
+            <div class="icon-large">🎉</div>
+            <h2>Pagamento confirmado!</h2>
+            <p>
+                Seu plano foi atualizado para <strong>Premium</strong>.<br>
+                Volte ao WhatsApp e continue usando o SuvFin sem limites! 💚
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = window.location.origin;
+
+        // Pegar phone da query string
+        function getPhone() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('phone') || '';
+        }
+
+        // Verificar se veio da página de sucesso
+        if (window.location.pathname.includes('/sucesso')) {
+            document.getElementById('upgrade-card').style.display = 'none';
+            document.getElementById('success-card').style.display = 'block';
+        }
+
+        async function generatePayment() {
+            const phone = getPhone();
+            if (!phone) {
+                showError('Número de telefone não informado. Acesse pelo link enviado no WhatsApp.');
+                return;
+            }
+
+            const btn = document.getElementById('btn-upgrade');
+            btn.classList.add('loading');
+            btn.textContent = 'Gerando link PIX...';
+            hideError();
+
+            try {
+                const response = await fetch(`${API_URL}/payment/create-link`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone }),
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Erro ao gerar pagamento');
+                }
+
+                // Redirecionar para o link de pagamento do AbacatePay
+                window.location.href = data.payment_url;
+
+            } catch (err) {
+                showError(err.message);
+                btn.classList.remove('loading');
+                btn.textContent = 'Fazer upgrade agora 🚀';
+            }
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('error-msg');
+            el.textContent = msg;
+            el.style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('error-msg').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,106 @@
+name: SuvFin CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  test:
+    name: Testes
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: suvfin_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/suvfin_test
+      REDIS_URL: redis://localhost:6379/0
+      APP_ENV: test
+      WEBHOOK_VERIFY_TOKEN: test_token
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov httpx anyio
+
+      - name: Rodar testes
+        run: |
+          pytest tests/ -v --cov=app --cov-report=xml
+
+      - name: Lint (ruff)
+        run: |
+          pip install ruff
+          ruff check app/
+
+  deploy:
+    name: Deploy
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # === OPÇÃO 1: Deploy no Railway ===
+      - name: Deploy Railway
+        if: ${{ vars.DEPLOY_TARGET == 'railway' }}
+        uses: bervProject/railway-deploy@main
+        with:
+          railway_token: ${{ secrets.RAILWAY_TOKEN }}
+          service: suvfin
+
+      # === OPÇÃO 2: Deploy no Render ===
+      - name: Deploy Render
+        if: ${{ vars.DEPLOY_TARGET == 'render' }}
+        run: |
+          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+
+      # === OPÇÃO 3: Deploy via Docker em VPS ===
+      - name: Deploy VPS (SSH)
+        if: ${{ vars.DEPLOY_TARGET == 'vps' }}
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /opt/suvfin
+            git pull origin main
+            docker compose up -d --build
+            docker compose exec app alembic upgrade head
