@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     WHATSAPP_PHONE_NUMBER_ID: str = ""
     WHATSAPP_BUSINESS_ACCOUNT_ID: str = ""
     WEBHOOK_VERIFY_TOKEN: str = "suvfin_verify_token"
+    FACEBOOK_APP_SECRET: str = ""
 
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/suvfin"

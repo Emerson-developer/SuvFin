@@ -19,6 +19,11 @@ class WebhookSignatureMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Só verificar em rotas POST do webhook
         if request.url.path == "/webhook" and request.method == "POST":
+            # Se APP_SECRET não está configurado, pular validação
+            if not settings.FACEBOOK_APP_SECRET:
+                logger.warning("⚠️ FACEBOOK_APP_SECRET não configurado - pulando validação")
+                return await call_next(request)
+
             signature = request.headers.get("X-Hub-Signature-256", "")
 
             if not signature:
@@ -45,7 +50,7 @@ class WebhookSignatureMiddleware(BaseHTTPMiddleware):
     def _compute_signature(self, body: bytes) -> str:
         """Calcula HMAC-SHA256 do body com o app secret."""
         mac = hmac.new(
-            settings.WHATSAPP_ACCESS_TOKEN.encode("utf-8"),
+            settings.FACEBOOK_APP_SECRET.encode("utf-8"),
             msg=body,
             digestmod=hashlib.sha256,
         )
