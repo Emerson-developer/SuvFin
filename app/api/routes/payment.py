@@ -28,6 +28,10 @@ from app.services.whatsapp.client import WhatsAppClient
 
 router = APIRouter(prefix="/payment", tags=["payment"])
 
+# Router separado para o webhook externo do AbacatePay
+# O AbacatePay envia para /webhooks/abacatepay?webhookSecret=<secret>
+webhook_router = APIRouter(tags=["payment"])
+
 
 @router.post("/create-link", response_model=CreateBillingResponse)
 async def create_payment_link(body: CreateBillingRequest):
@@ -118,6 +122,7 @@ async def create_payment_link(body: CreateBillingRequest):
 
 
 @router.post("/webhook")
+@webhook_router.post("/webhooks/abacatepay")
 async def abacatepay_webhook(
     request: Request,
     webhookSecret: str = Query(None, alias="webhookSecret"),

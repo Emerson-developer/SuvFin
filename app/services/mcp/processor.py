@@ -1,10 +1,14 @@
 """
 Processador MCP: Orquestra a LLM (Claude) com as tools financeiras.
 Recebe mensagem do usuário → LLM decide qual tool chamar → retorna resposta.
+Inclui otimizações de custo: cache, rate limiting, roteamento de modelos,
+limitação de contexto, monitoramento de tokens.
 """
 
+import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import date
 from typing import Optional
 
 import anthropic
@@ -22,6 +26,7 @@ class MCPResponse:
     text: str
     media: Optional[bytes] = None
     media_type: Optional[str] = None  # image/png, application/pdf
+    tokens_used: dict = field(default_factory=dict)  # input/output tokens tracking
 
 
 SYSTEM_PROMPT = """Você é o SuvFin 💰, um assistente de finanças pessoais via WhatsApp.
@@ -46,6 +51,7 @@ Regras IMPORTANTES:
 - Use datas no formato DD/MM/YYYY nas respostas
 - Se o usuário disser apenas "Oi" ou cumprimentar, responda com uma mensagem de boas-vindas
 - Não invente dados, use apenas o que vem das tools
+- Seja conciso nas respostas para economizar tokens
 
 Mensagem de boas-vindas:
 "Olá! Sou o SuvFin 💰, seu assistente de finanças pessoais!
@@ -58,6 +64,43 @@ Posso te ajudar a:
 
 Me diga como posso ajudar!"
 """
+
+# Palavras-chave que indicam intenções simples (usar Haiku)
+SIMPLE_INTENTS = {
+    "oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "hey", "hi",
+    "hello", "e aí", "eai", "fala", "obrigado", "obrigada", "valeu",
+    "tchau", "até mais", "flw", "blz", "ok", "tudo bem", "tá", "ta",
+    "sim", "não", "nao", "s", "n", "show", "beleza", "top",
+}
+
+# Intenções que precisam de tool use (usar Sonnet)
+TOOL_KEYWORDS = {
+    "gast", "compro", "pague", "registr", "lança", "saldo", "relatório",
+    "relatorio", "quanto", "comprovante", "foto", "imagem", "remov",
+    "exclui", "delet", "apag", "edit", "alter", "mud",
+    "categ", "receita", "entrada", "salário", "salario", "renda",
+}
+
+
+def _select_model(text: str) -> str:
+    """Seleciona o modelo ideal baseado na complexidade da mensagem."""
+    text_lower = text.strip().lower()
+
+    # Mensagens muito curtas ou cumprimentos → Haiku
+    if text_lower in SIMPLE_INTENTS or len(text_lower) <= 3:
+        return settings.ANTHROPIC_MODEL_LIGHT
+
+    # Verificar se precisa de tools → Sonnet
+    for keyword in TOOL_KEYWORDS:
+        if keyword in text_lower:
+            return settings.ANTHROPIC_MODEL
+
+    # Mensagens curtas sem keywords de tools → Haiku
+    if len(text_lower.split()) <= 5:
+        return settings.ANTHROPIC_MODEL_LIGHT
+
+    # Default → Sonnet (para segurança)
+    return settings.ANTHROPIC_MODEL
 
 
 class MCPProcessor:
@@ -76,10 +119,28 @@ class MCPProcessor:
     ) -> MCPResponse:
         """Processa uma mensagem e retorna a resposta."""
 
-        # Recuperar histórico da conversa
+        # Rate limiting por usuário
+        rate_check = await self._check_user_rate_limit(phone)
+        if not rate_check["allowed"]:
+            return MCPResponse(
+                text=rate_check["message"],
+                tokens_used={"input": 0, "output": 0, "blocked": True},
+            )
+
+        # Verificar cache para mensagens de texto
+        if message_type == "text":
+            cached = await self._get_cached_response(phone, content)
+            if cached:
+                logger.info(f"💾 Cache hit para {phone}: {content[:30]}")
+                return MCPResponse(
+                    text=cached,
+                    tokens_used={"input": 0, "output": 0, "cached": True},
+                )
+
+        # Recuperar histórico da conversa (LIMITADO)
         conversation = await self._get_conversation(phone)
 
-        # Se for imagem, processar com Vision
+        # Se for imagem, processar com Vision (sempre Sonnet)
         if message_type == "image":
             return await self._process_image(user_id, phone, content, conversation)
 
@@ -125,23 +186,23 @@ class MCPProcessor:
             }
         ]
 
-        system = (
-            f"{SYSTEM_PROMPT}\n\n"
-            f"User ID do usuário atual: {user_id}\n"
-            f"Data de hoje: {self._today()}"
-        )
+        # Prompt caching: system prompt como bloco cacheável
+        system = self._build_system_prompt(user_id=user_id)
 
         try:
             response = await self.client.messages.create(
-                model=settings.ANTHROPIC_MODEL,
+                model=settings.ANTHROPIC_MODEL,  # Vision sempre com Sonnet
                 max_tokens=2048,
                 system=system,
                 messages=messages,
                 tools=TOOL_DEFINITIONS,
             )
 
+            # Monitorar tokens
+            await self._track_tokens(phone, response)
+
             result_text = await self._handle_tool_loop(
-                response, messages, system
+                response, messages, system, phone
             )
         except Exception as e:
             logger.error(f"Erro no Vision: {e}")
@@ -165,46 +226,90 @@ class MCPProcessor:
 
         messages = conversation + [{"role": "user", "content": text}]
 
-        system = (
-            f"{SYSTEM_PROMPT}\n\n"
-            f"User ID do usuário atual: {user_id}\n"
-            f"Nome do usuário: {name}\n"
-            f"Data de hoje: {self._today()}"
+        # Roteamento de modelo: Haiku para simples, Sonnet para complexo
+        model = _select_model(text)
+
+        # Prompt caching: system prompt como bloco cacheável
+        system = self._build_system_prompt(
+            user_id=user_id, name=name
         )
 
+        # Se for Haiku, não mandar tools (economia extra)
+        use_tools = model == settings.ANTHROPIC_MODEL
+        tools = TOOL_DEFINITIONS if use_tools else None
+
         try:
-            response = await self.client.messages.create(
-                model=settings.ANTHROPIC_MODEL,
-                max_tokens=2048,
-                system=system,
-                messages=messages,
-                tools=TOOL_DEFINITIONS,
-            )
+            create_kwargs = {
+                "model": model,
+                "max_tokens": 1024 if not use_tools else 2048,
+                "system": system,
+                "messages": messages,
+            }
+            if tools:
+                create_kwargs["tools"] = tools
+
+            response = await self.client.messages.create(**create_kwargs)
+
+            # Monitorar tokens
+            tokens_used = await self._track_tokens(phone, response)
+
+            # Se Haiku respondeu mas precisa de tool, re-rotear para Sonnet
+            if (
+                not use_tools
+                and response.stop_reason == "end_turn"
+                and any(
+                    kw in response.content[0].text.lower()
+                    for kw in ["não consigo", "não tenho acesso", "preciso de"]
+                    if hasattr(response.content[0], "text")
+                )
+            ):
+                logger.info(f"🔄 Re-roteando para Sonnet: {text[:30]}")
+                response = await self.client.messages.create(
+                    model=settings.ANTHROPIC_MODEL,
+                    max_tokens=2048,
+                    system=system,
+                    messages=messages,
+                    tools=TOOL_DEFINITIONS,
+                )
+                tokens_used = await self._track_tokens(phone, response)
 
             result_text = await self._handle_tool_loop(
-                response, messages, system
+                response, messages, system, phone
             )
         except anthropic.APIError as e:
             logger.error(f"Erro na API Anthropic: {e}")
             result_text = "❌ Ops, tive um problema. Tente novamente em instantes."
+            tokens_used = {"input": 0, "output": 0, "error": True}
         except Exception as e:
             logger.error(f"Erro inesperado no processamento: {e}")
             result_text = "❌ Algo deu errado. Tente novamente."
+            tokens_used = {"input": 0, "output": 0, "error": True}
 
         # Salvar no histórico
         await self._save_conversation(phone, "user", text)
         await self._save_conversation(phone, "assistant", result_text)
 
-        return MCPResponse(text=result_text)
+        # Salvar cache (apenas para respostas sem tool_use)
+        if not tokens_used.get("had_tool_use"):
+            await self._cache_response(phone, text, result_text)
+
+        logger.info(
+            f"📊 Modelo: {model.split('/')[-1]} | "
+            f"Tokens: {tokens_used.get('input', 0)}in/{tokens_used.get('output', 0)}out | "
+            f"User: {phone}"
+        )
+
+        return MCPResponse(text=result_text, tokens_used=tokens_used)
 
     async def _handle_tool_loop(
         self,
         response,
         messages: list[dict],
-        system: str,
+        system: list[dict],
+        phone: str,
     ) -> str:
         """Executa tools em loop até a LLM retornar texto final."""
-        max_iterations = 10
+        max_iterations = 5  # Reduzido de 10 para 5
 
         for _ in range(max_iterations):
             if response.stop_reason != "tool_use":
@@ -268,6 +373,9 @@ class MCPProcessor:
                 tools=TOOL_DEFINITIONS,
             )
 
+            # Monitorar tokens de cada iteração do loop
+            await self._track_tokens(phone, response)
+
         # Extrair texto final
         return "".join(
             block.text
@@ -275,29 +383,213 @@ class MCPProcessor:
             if hasattr(block, "text")
         )
 
+    # --- Prompt Caching ---
+
+    def _build_system_prompt(
+        self, user_id: str, name: str = "Usuário"
+    ) -> list[dict]:
+        """
+        Constrói system prompt com suporte a prompt caching da Anthropic.
+        O bloco estático é cacheado, e o contexto dinâmico é adicionado separadamente.
+        """
+        return [
+            {
+                "type": "text",
+                "text": SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},  # Prompt caching
+            },
+            {
+                "type": "text",
+                "text": (
+                    f"User ID do usuário atual: {user_id}\n"
+                    f"Nome do usuário: {name}\n"
+                    f"Data de hoje: {date.today().isoformat()}"
+                ),
+            },
+        ]
+
+    # --- Rate Limiting por Usuário ---
+
+    async def _check_user_rate_limit(self, phone: str) -> dict:
+        """Verifica rate limit por usuário (hora e dia)."""
+        try:
+            # Limite por hora
+            key_hour = f"rl:user:hour:{phone}"
+            current_hour = await redis_client.incr(key_hour)
+            if current_hour == 1:
+                await redis_client.expire(key_hour, 3600)
+
+            if current_hour > settings.LLM_MAX_MESSAGES_PER_USER_HOUR:
+                logger.warning(
+                    f"⚠️ Rate limit/hora excedido: {phone} ({current_hour} msgs)"
+                )
+                return {
+                    "allowed": False,
+                    "message": (
+                        "⏳ Você enviou muitas mensagens. "
+                        "Aguarde alguns minutos e tente novamente."
+                    ),
+                }
+
+            # Limite por dia
+            key_day = f"rl:user:day:{phone}"
+            current_day = await redis_client.incr(key_day)
+            if current_day == 1:
+                await redis_client.expire(key_day, 86400)
+
+            if current_day > settings.LLM_MAX_MESSAGES_PER_USER_DAY:
+                logger.warning(
+                    f"⚠️ Rate limit/dia excedido: {phone} ({current_day} msgs)"
+                )
+                return {
+                    "allowed": False,
+                    "message": (
+                        "⏳ Você atingiu o limite diário de mensagens. "
+                        "Tente novamente amanhã! 💤"
+                    ),
+                }
+
+            return {"allowed": True}
+
+        except Exception as e:
+            logger.warning(f"Rate limit check falhou: {e}")
+            return {"allowed": True}  # Fail open
+
+    # --- Cache de Respostas ---
+
+    async def _get_cached_response(self, phone: str, text: str) -> Optional[str]:
+        """Busca resposta cacheada para mensagens idênticas recentes."""
+        try:
+            cache_key = self._cache_key(phone, text)
+            cached = await redis_client.get(cache_key)
+            return cached
+        except Exception:
+            return None
+
+    async def _cache_response(self, phone: str, text: str, response: str):
+        """Salva resposta no cache com TTL curto."""
+        try:
+            cache_key = self._cache_key(phone, text)
+            await redis_client.setex(
+                cache_key, settings.LLM_CACHE_TTL, response
+            )
+        except Exception as e:
+            logger.warning(f"Erro ao salvar cache: {e}")
+
+    @staticmethod
+    def _cache_key(phone: str, text: str) -> str:
+        """Gera chave de cache baseada no telefone + texto normalizado."""
+        normalized = text.strip().lower()
+        text_hash = hashlib.md5(normalized.encode()).hexdigest()[:12]
+        return f"cache:llm:{phone}:{text_hash}"
+
+    # --- Monitoramento de Tokens ---
+
+    async def _track_tokens(self, phone: str, response) -> dict:
+        """Rastreia tokens consumidos por usuário e globalmente."""
+        try:
+            input_tokens = getattr(response.usage, "input_tokens", 0)
+            output_tokens = getattr(response.usage, "output_tokens", 0)
+            cache_read = getattr(response.usage, "cache_read_input_tokens", 0)
+            cache_create = getattr(response.usage, "cache_creation_input_tokens", 0)
+            had_tool_use = response.stop_reason == "tool_use"
+
+            today = date.today().isoformat()
+
+            # Tokens por usuário (diário)
+            user_key = f"tokens:user:{phone}:{today}"
+            await redis_client.hincrby(user_key, "input", input_tokens)
+            await redis_client.hincrby(user_key, "output", output_tokens)
+            await redis_client.hincrby(user_key, "cache_read", cache_read)
+            await redis_client.hincrby(user_key, "requests", 1)
+            await redis_client.expire(user_key, 172800)  # 2 dias
+
+            # Tokens global (diário)
+            global_key = f"tokens:global:{today}"
+            await redis_client.hincrby(global_key, "input", input_tokens)
+            await redis_client.hincrby(global_key, "output", output_tokens)
+            await redis_client.hincrby(global_key, "cache_read", cache_read)
+            await redis_client.hincrby(global_key, "cache_create", cache_create)
+            await redis_client.hincrby(global_key, "requests", 1)
+            await redis_client.expire(global_key, 604800)  # 7 dias
+
+            # Calcular custo estimado e verificar alerta
+            await self._check_cost_alert(today)
+
+            logger.debug(
+                f"📈 Tokens: {input_tokens}in/{output_tokens}out "
+                f"(cache_read={cache_read}) | User: {phone}"
+            )
+
+            return {
+                "input": input_tokens,
+                "output": output_tokens,
+                "cache_read": cache_read,
+                "had_tool_use": had_tool_use,
+            }
+
+        except Exception as e:
+            logger.warning(f"Erro ao rastrear tokens: {e}")
+            return {"input": 0, "output": 0}
+
+    async def _check_cost_alert(self, today: str):
+        """Verifica se o custo diário ultrapassou o limite configurado."""
+        try:
+            global_key = f"tokens:global:{today}"
+            data = await redis_client.hgetall(global_key)
+
+            if not data:
+                return
+
+            input_tokens = int(data.get("input", 0))
+            output_tokens = int(data.get("output", 0))
+
+            # Preços Claude Sonnet 4 (estimativa conservadora)
+            cost_input = (input_tokens / 1_000_000) * 3.00
+            cost_output = (output_tokens / 1_000_000) * 15.00
+            total_cost = cost_input + cost_output
+
+            # Alertar apenas uma vez por dia
+            alert_key = f"cost:alert:{today}"
+            already_alerted = await redis_client.exists(alert_key)
+
+            if total_cost >= settings.LLM_COST_ALERT_DAILY_USD and not already_alerted:
+                logger.critical(
+                    f"🚨 ALERTA DE CUSTO! Custo diário estimado: ${total_cost:.2f} "
+                    f"(limite: ${settings.LLM_COST_ALERT_DAILY_USD:.2f}) | "
+                    f"Input: {input_tokens:,} tokens | Output: {output_tokens:,} tokens | "
+                    f"Requests: {data.get('requests', 0)}"
+                )
+                await redis_client.setex(alert_key, 86400, "1")
+
+        except Exception as e:
+            logger.warning(f"Erro ao verificar custo: {e}")
+
     # --- Gerenciamento de conversa (Redis) ---
 
     async def _get_conversation(self, phone: str) -> list[dict]:
-        """Recupera histórico recente do Redis."""
+        """
+        Recupera histórico recente do Redis.
+        LIMITADO para economizar tokens — dados financeiros permanecem
+        acessíveis via tools (database).
+        """
         try:
-            raw = await redis_client.lrange(f"conv:{phone}", 0, 19)
+            max_msgs = settings.LLM_MAX_CONVERSATION_MESSAGES
+            raw = await redis_client.lrange(f"conv:{phone}", -max_msgs, -1)
             return [json.loads(msg) for msg in raw] if raw else []
         except Exception as e:
             logger.warning(f"Erro ao ler conversa do Redis: {e}")
             return []
 
     async def _save_conversation(self, phone: str, role: str, content: str):
-        """Salva mensagem no histórico com TTL de 2 horas."""
+        """Salva mensagem no histórico com TTL configurável."""
         try:
             key = f"conv:{phone}"
+            max_msgs = settings.LLM_MAX_CONVERSATION_MESSAGES
             await redis_client.rpush(
                 key, json.dumps({"role": role, "content": content})
             )
-            await redis_client.ltrim(key, -20, -1)  # Manter últimas 20 msgs
-            await redis_client.expire(key, 7200)  # TTL 2 horas
+            await redis_client.ltrim(key, -max_msgs, -1)
+            await redis_client.expire(key, settings.LLM_CONVERSATION_TTL)
         except Exception as e:
             logger.warning(f"Erro ao salvar conversa no Redis: {e}")
-
-    def _today(self) -> str:
-        from datetime import date
-        return date.today().isoformat()

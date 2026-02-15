@@ -29,6 +29,15 @@ class Settings(BaseSettings):
     # Anthropic
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
+    ANTHROPIC_MODEL_LIGHT: str = "claude-3-5-haiku-20241022"
+
+    # Otimização de custos LLM
+    LLM_MAX_CONVERSATION_MESSAGES: int = 6  # Histórico de chat (não afeta dados financeiros)
+    LLM_CONVERSATION_TTL: int = 3600  # TTL conversa em segundos (1 hora)
+    LLM_CACHE_TTL: int = 300  # Cache de respostas em segundos (5 min)
+    LLM_MAX_MESSAGES_PER_USER_HOUR: int = 30  # Rate limit por usuário/hora
+    LLM_MAX_MESSAGES_PER_USER_DAY: int = 200  # Rate limit por usuário/dia
+    LLM_COST_ALERT_DAILY_USD: float = 10.0  # Alerta de custo diário em USD
 
     # S3 / R2
     S3_ENDPOINT_URL: str = ""

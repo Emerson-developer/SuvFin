@@ -18,6 +18,8 @@ from app.config.redis_client import close_redis
 from app.api.routes.webhook import router as webhook_router
 from app.api.routes.health import router as health_router
 from app.api.routes.payment import router as payment_router
+from app.api.routes.payment import webhook_router as abacatepay_webhook_router
+from app.api.routes.tokens import router as tokens_router
 from app.api.middleware.signature import WebhookSignatureMiddleware
 from app.api.middleware.rate_limit import RateLimitMiddleware
 from app.services.finance.category_service import CategoryService
@@ -82,6 +84,8 @@ app.add_middleware(WebhookSignatureMiddleware)
 app.include_router(health_router)
 app.include_router(webhook_router)
 app.include_router(payment_router)
+app.include_router(abacatepay_webhook_router)
+app.include_router(tokens_router)
 
 # --- Páginas estáticas ---
 static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
