@@ -147,9 +147,17 @@ async def abacatepay_webhook(
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
     # O payload contém os dados da cobrança (billing)
-    billing_data = payload.get("data", payload)
+    # Estrutura: { "event": "billing.paid", "data": { "billing": { "id": "...", ... } } }
+    data = payload.get("data", {})
+    billing_data = data.get("billing", data) if isinstance(data, dict) else {}
     billing_id = billing_data.get("id", "")
     billing_status = billing_data.get("status", "")
+
+    # Fallback: tentar pegar do nível superior se não achou
+    if not billing_id:
+        billing_id = data.get("id", "") or payload.get("id", "")
+    if not billing_status:
+        billing_status = data.get("status", "") or payload.get("status", "")
 
     if not billing_id:
         logger.warning("Webhook sem billing ID")
