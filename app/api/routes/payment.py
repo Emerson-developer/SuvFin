@@ -163,7 +163,16 @@ async def abacatepay_webhook(
         logger.warning("Webhook sem billing ID")
         return {"status": "ignored"}
 
-    logger.info(f"🥑 Cobrança {billing_id} → status: {billing_status}")
+    # Usar o tipo de evento como sinal de pagamento confirmado
+    event_type = payload.get("event", "")
+    if event_type == "billing.paid" and billing_status not in ("PAID",):
+        logger.info(
+            f"🥑 Evento '{event_type}' com status '{billing_status}' — "
+            f"tratando como PAID"
+        )
+        billing_status = "PAID"
+
+    logger.info(f"🥑 Cobrança {billing_id} → status: {billing_status} (event: {event_type})")
 
     # 3. Buscar pagamento local
     async with async_session() as session:
@@ -308,6 +317,8 @@ def _map_billing_status(status: str) -> PaymentStatus:
     mapping = {
         "PENDING": PaymentStatus.PENDING,
         "PAID": PaymentStatus.PAID,
+        "ACTIVE": PaymentStatus.PAID,  # AbacatePay envia ACTIVE quando pago
+        "COMPLETED": PaymentStatus.PAID,
         "EXPIRED": PaymentStatus.EXPIRED,
         "CANCELLED": PaymentStatus.CANCELLED,
         "REFUNDED": PaymentStatus.REFUNDED,
