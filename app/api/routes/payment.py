@@ -174,8 +174,60 @@ async def abacatepay_webhook(
         payment = result.scalar_one_or_none()
 
         if not payment:
-            logger.warning(f"Pagamento não encontrado para billing: {billing_id}")
-            return {"status": "not_found"}
+            # Pagamento não existe localmente — provavelmente criado direto no AbacatePay
+            # Tentar criar usuário e pagamento a partir dos dados do webhook
+            customer_data = billing_data.get("customer", {}) or data.get("customer", {}) or {}
+            metadata = customer_data.get("metadata", {}) or billing_data.get("metadata", {}) or {}
+
+            customer_phone = (
+                customer_data.get("cellphone", "")
+                or metadata.get("cellphone", "")
+                or metadata.get("phone", "")
+            )
+            customer_name = customer_data.get("name", "") or metadata.get("name", "")
+            customer_id = customer_data.get("id", "")
+            amount = billing_data.get("amount") or data.get("amount") or settings.PREMIUM_PRICE_CENTS
+
+            if not customer_phone:
+                logger.warning(
+                    f"Webhook sem billing local e sem telefone do cliente. "
+                    f"billing_id={billing_id}, payload={payload}"
+                )
+                return {"status": "not_found", "reason": "no_phone"}
+
+            # Normalizar telefone
+            customer_phone = (
+                customer_phone.replace(" ", "").replace("-", "")
+                .replace("(", "").replace(")", "")
+            )
+            if not customer_phone.startswith("55") and len(customer_phone) <= 11:
+                customer_phone = f"55{customer_phone}"
+
+            logger.info(
+                f"🆕 Criando usuário/pagamento via webhook direto. "
+                f"phone={customer_phone}, name={customer_name}, billing={billing_id}"
+            )
+
+            # Criar ou buscar usuário
+            license_service = LicenseService()
+            user = await license_service.get_or_create_user(
+                phone=customer_phone,
+                name=customer_name or "Usuário AbacatePay",
+            )
+
+            # Criar registro de pagamento
+            payment = Payment(
+                user_id=user.id,
+                abacatepay_billing_id=billing_id,
+                abacatepay_customer_id=customer_id or None,
+                amount_cents=int(amount) if amount else settings.PREMIUM_PRICE_CENTS,
+                status=PaymentStatus.PENDING,
+                payment_url="",
+            )
+            session.add(payment)
+            await session.flush()
+
+            logger.info(f"✅ Pagamento criado via webhook: user={customer_phone}, billing={billing_id}")
 
         # 4. Atualizar status do pagamento
         old_status = payment.status
