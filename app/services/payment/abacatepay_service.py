@@ -151,9 +151,19 @@ class AbacatePayService:
                 headers=self.headers,
             )
 
-            if response.status_code == 200:
+            if response.status_code in (200, 201):
                 data = response.json()
-                billing = data.get("data", {})
+                logger.debug(f"AbacatePay billing response: {data}")
+                billing = data.get("data") or {}
+                if not billing or not billing.get("url"):
+                    logger.error(
+                        f"❌ AbacatePay retornou resposta sem dados válidos: {data}"
+                    )
+                    raise AbacatePayError(
+                        "AbacatePay retornou resposta sem dados de cobrança",
+                        status_code=response.status_code,
+                        response_body=response.text,
+                    )
                 logger.info(
                     f"🥑 Cobrança criada: {billing.get('id')} — "
                     f"R$ {price_cents / 100:.2f} — URL: {billing.get('url')}"

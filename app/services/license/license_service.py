@@ -147,6 +147,13 @@ class LicenseService:
             period=period,
         )
 
+        if not billing or not isinstance(billing, dict):
+            raise ValueError("AbacatePay não retornou dados válidos de cobrança")
+
+        payment_url = billing.get("url", "")
+        if not payment_url:
+            raise ValueError("AbacatePay não retornou URL de pagamento")
+
         # Salvar localmente
         async with async_session() as session:
             payment = Payment(
@@ -156,12 +163,12 @@ class LicenseService:
                 plan_type=plan,
                 billing_period=period,
                 status=PaymentStatus.PENDING,
-                payment_url=billing.get("url", ""),
+                payment_url=payment_url,
             )
             session.add(payment)
             await session.commit()
 
-        return billing.get("url", "")
+        return payment_url
 
     async def check_transaction_limit(self, user_id: str) -> dict:
         """Verifica se o usuário atingiu o limite de transações (trial)."""
