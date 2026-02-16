@@ -115,65 +115,29 @@ class LicenseService:
             abacatepay_customer_id=abacatepay_customer_id,
         )
 
+    # Links fixos de pagamento pré-criados no AbacatePay
+    PAYMENT_LINKS = {
+        ("BASICO", "MONTHLY"): "https://app.abacatepay.com/pay/bill_ugcAJz0p6j0Bmz4FSeBPEEdh",
+        ("BASICO", "ANNUAL"): "https://app.abacatepay.com/pay/bill_HUMtfuQQ4yTga0bXDrdx5aFq",
+        ("PRO", "MONTHLY"): "https://app.abacatepay.com/pay/bill_bLp1mFcbztXSqZBgy2dQtSQK",
+        ("PRO", "ANNUAL"): "https://app.abacatepay.com/pay/bill_mMYEMuYcXUWt0gLwyED2GrnM",
+        ("PREMIUM", "MONTHLY"): "https://app.abacatepay.com/pay/bill_aPmMZjhfECMXhfWBtUrWsa1T",
+        ("PREMIUM", "ANNUAL"): "https://app.abacatepay.com/pay/bill_phz1JkKGHP4FHLsbYhfXTAF6",
+    }
+
     async def get_payment_link(self, phone: str, plan: str = "PRO", period: str = "MONTHLY") -> str:
         """
-        Gera um link de pagamento via AbacatePay.
-        Retorna a URL de pagamento PIX.
+        Retorna o link de pagamento fixo do AbacatePay para o plano selecionado.
         """
-        from app.services.payment.abacatepay_service import AbacatePayService
-        from app.models.payment import Payment, PaymentStatus
+        plan = plan.upper()
+        period = period.upper()
 
-        user, _ = await self.get_or_create_user(phone)
+        url = self.PAYMENT_LINKS.get((plan, period))
+        if not url:
+            raise ValueError(f"Plano inválido: {plan} {period}")
 
-        # Verificar cobrança pendente existente
-        async with async_session() as session:
-            from sqlalchemy import select as sel
-            stmt = sel(Payment).where(
-                Payment.user_id == user.id,
-                Payment.status == PaymentStatus.PENDING,
-            )
-            result = await session.execute(stmt)
-            existing = result.scalar_one_or_none()
-            if existing and existing.payment_url:
-                return existing.payment_url
-
-        # Criar nova cobrança
-        abacatepay = AbacatePayService()
-        price_cents = abacatepay.get_plan_price(plan, period)
-
-        # Tentar usar customer_id existente (opcional na API do AbacatePay)
-        customer_id = user.abacatepay_customer_id or None
-
-        billing = await abacatepay.create_plan_billing(
-            user_id=str(user.id),
-            user_phone=phone,
-            plan=plan,
-            period=period,
-            customer_id=customer_id,
-        )
-
-        if not billing or not isinstance(billing, dict):
-            raise ValueError("AbacatePay não retornou dados válidos de cobrança")
-
-        payment_url = billing.get("url", "")
-        if not payment_url:
-            raise ValueError("AbacatePay não retornou URL de pagamento")
-
-        # Salvar localmente
-        async with async_session() as session:
-            payment = Payment(
-                user_id=user.id,
-                abacatepay_billing_id=billing.get("id", ""),
-                amount_cents=price_cents,
-                plan_type=plan,
-                billing_period=period,
-                status=PaymentStatus.PENDING,
-                payment_url=payment_url,
-            )
-            session.add(payment)
-            await session.commit()
-
-        return payment_url
+        logger.info(f"💳 Link de pagamento para {phone}: {plan} {period} → {url}")
+        return url
 
     async def check_transaction_limit(self, user_id: str) -> dict:
         """Verifica se o usuário atingiu o limite de transações (trial)."""
