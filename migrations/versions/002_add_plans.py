@@ -18,10 +18,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Add new license types to the enum
-    # PostgreSQL requires ALTER TYPE to add values
+    # ALTER TYPE ADD VALUE não pode rodar dentro de uma transação no PostgreSQL.
+    # Então fazemos commit da transação atual, adicionamos os valores,
+    # e depois continuamos com as alterações de tabela normalmente.
+    op.execute("COMMIT")
     op.execute("ALTER TYPE licensetype ADD VALUE IF NOT EXISTS 'BASICO'")
     op.execute("ALTER TYPE licensetype ADD VALUE IF NOT EXISTS 'PRO'")
+    op.execute("BEGIN")
 
     # Add plan_type and billing_period columns to payments table
     op.add_column(
