@@ -42,7 +42,7 @@ async def create_payment_link(body: CreateBillingRequest):
     Também pode ser enviado via WhatsApp direto.
     """
     license_service = LicenseService()
-    user = await license_service.get_or_create_user(body.phone, body.name)
+    user, _ = await license_service.get_or_create_user(body.phone, body.name)
 
     # Se já é Premium, não precisa pagar
     if user.license_type == LicenseType.PREMIUM:
@@ -219,7 +219,7 @@ async def abacatepay_webhook(
 
             # Criar ou buscar usuário
             license_service = LicenseService()
-            user = await license_service.get_or_create_user(
+            user, _ = await license_service.get_or_create_user(
                 phone=customer_phone,
                 name=customer_name or "Usuário AbacatePay",
             )

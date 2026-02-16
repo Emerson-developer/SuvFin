@@ -51,17 +51,18 @@ class LicenseService:
             logger.info(f"Novo usuário trial criado: {phone} | ID: {user.id}")
             return user
 
-    async def get_or_create_user(self, phone: str, name: str = None) -> User:
-        """Busca usuário ou cria um novo com trial."""
+    async def get_or_create_user(self, phone: str, name: str = None) -> tuple[User, bool]:
+        """Busca usuário ou cria um novo com trial. Retorna (user, is_new)."""
         async with async_session() as session:
             stmt = select(User).where(User.phone == phone)
             result = await session.execute(stmt)
             user = result.scalar_one_or_none()
 
             if user:
-                return user
+                return user, False
 
-        return await self.create_trial_user(phone, name)
+        new_user = await self.create_trial_user(phone, name)
+        return new_user, True
 
     async def upgrade_to_premium(
         self, user_id: str, abacatepay_customer_id: str = None
@@ -92,7 +93,7 @@ class LicenseService:
         from app.services.payment.abacatepay_service import AbacatePayService
         from app.models.payment import Payment, PaymentStatus
 
-        user = await self.get_or_create_user(phone)
+        user, _ = await self.get_or_create_user(phone)
 
         # Verificar cobrança pendente existente
         async with async_session() as session:

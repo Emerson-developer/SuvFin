@@ -83,7 +83,34 @@ async def _process_webhook(payload: dict):
 
     # Verificar/criar usuário
     license_service = LicenseService()
-    user = await license_service.get_or_create_user(phone, name)
+    user, is_new_user = await license_service.get_or_create_user(phone, name)
+
+    # Novo usuário — enviar mensagem de boas-vindas
+    if is_new_user:
+        display_name = name or "usuário"
+        expires = user.license_expires_at
+        expires_str = expires.strftime("%d/%m/%Y") if expires else "7 dias"
+        welcome_msg = (
+            f"Olá, {display_name}! 👋\n\n"
+            f"🌟 *Bem-vindo(a) ao SuvFin!*\n\n"
+            f"Sou seu assistente de finanças pessoais pelo WhatsApp. "
+            f"Vou te ajudar a organizar sua vida financeira de forma simples e rápida!\n\n"
+            f"🆓 Você ganhou um *período de teste grátis* até *{expires_str}*!\n\n"
+            f"O que posso fazer por você:\n"
+            f"📝 Registrar gastos e receitas\n"
+            f"📊 Gerar relatórios por período e categoria\n"
+            f"💰 Mostrar seu saldo atual\n"
+            f"📸 Analisar comprovantes por foto\n"
+            f"🗑️ Remover e editar lançamentos\n\n"
+            f"Experimente agora! Envie algo como:\n"
+            f'  _"Gastei 50 reais no almoço"_\n'
+            f'  _"Qual meu saldo?"_\n'
+            f'  _"Recebi 3000 de salário"_\n\n'
+            f"Vamos começar? 🚀"
+        )
+        await client.send_text(phone, welcome_msg)
+        logger.info(f"🌟 Novo usuário trial criado e boas-vindas enviada: {phone}")
+        return
 
     if not user.is_license_valid:
         # Gerar link de pagamento PIX via AbacatePay
