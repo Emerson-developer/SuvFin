@@ -13,6 +13,8 @@ from app.config.database import Base
 
 class LicenseType(PyEnum):
     FREE_TRIAL = "FREE_TRIAL"
+    BASICO = "BASICO"
+    PRO = "PRO"
     PREMIUM = "PREMIUM"
 
 
@@ -37,8 +39,11 @@ class User(Base):
     @property
     def is_license_valid(self) -> bool:
         """Verifica se a licença está ativa."""
-        if self.license_type == LicenseType.PREMIUM:
-            return True
+        if self.license_type in (LicenseType.BASICO, LicenseType.PRO, LicenseType.PREMIUM):
+            # Planos pagos: verificar expiração se houver
+            if self.license_expires_at:
+                return self.license_expires_at >= date.today()
+            return True  # Sem data = válido
         if self.license_expires_at and self.license_expires_at >= date.today():
             return True
         return False
@@ -46,6 +51,10 @@ class User(Base):
     @property
     def max_transactions(self) -> int | None:
         """Limite de transações por tipo de licença."""
-        if self.license_type == LicenseType.FREE_TRIAL:
-            return 50
-        return None  # Sem limite para premium
+        limits = {
+            LicenseType.FREE_TRIAL: 50,
+            LicenseType.BASICO: 100,
+            LicenseType.PRO: None,   # Ilimitado
+            LicenseType.PREMIUM: None,  # Ilimitado
+        }
+        return limits.get(self.license_type, 50)

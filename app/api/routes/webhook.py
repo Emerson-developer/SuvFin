@@ -113,26 +113,34 @@ async def _process_webhook(payload: dict):
         return
 
     if not user.is_license_valid:
-        # Gerar link de pagamento PIX via AbacatePay
+        # Gerar link de pagamento PIX via AbacatePay (plano Pro como padrão)
         try:
-            payment_url = await license_service.get_payment_link(phone)
+            payment_url = await license_service.get_payment_link(phone, plan="PRO", period="MONTHLY")
             upgrade_msg = (
                 "⏰ Seu período de teste expirou!\n\n"
-                "Para continuar usando o SuvFin, faça upgrade para o plano Premium:\n\n"
-                f"🔗 {payment_url}\n\n"
-                "💰 R$ 9,90 — Pagamento único via PIX\n"
-                "✅ Lançamentos ilimitados\n"
-                "✅ Relatórios avançados\n"
-                "✅ Suporte prioritário\n\n"
-                "O link acima abre o pagamento PIX instantâneo! 🥑"
+                "Escolha um plano para continuar usando o SuvFin:\n\n"
+                "⭐ *Básico* — R$ 9,90/mês\n"
+                "  100 transações/mês, relatórios básicos\n\n"
+                "⚡ *Pro* — R$ 19,90/mês _(mais popular!)_\n"
+                "  Transações ilimitadas, relatórios detalhados, alertas\n\n"
+                "👑 *Premium* — R$ 34,90/mês\n"
+                "  Tudo do Pro + análise preditiva, consultoria por IA\n\n"
+                "💡 _Planos anuais têm 20% de desconto!_\n\n"
+                f"🔗 Assine o plano Pro agora: {payment_url}\n\n"
+                "Para escolher outro plano, envie:\n"
+                '  _"Quero o plano Básico"_\n'
+                '  _"Quero o plano Premium"_\n'
+                '  _"Quero plano anual"_'
             )
         except Exception as e:
             logger.error(f"Erro ao gerar link de pagamento: {e}")
             upgrade_msg = (
                 "⏰ Seu período de teste expirou!\n\n"
-                "Para continuar usando o SuvFin, faça upgrade para o plano Premium!\n"
-                "💰 R$ 9,90 — Lançamentos ilimitados e muito mais!\n\n"
-                "Entre em contato para fazer o upgrade. 🚀"
+                "Para continuar usando o SuvFin, escolha um plano:\n\n"
+                "⭐ *Básico* — R$ 9,90/mês\n"
+                "⚡ *Pro* — R$ 19,90/mês\n"
+                "👑 *Premium* — R$ 34,90/mês\n\n"
+                "Envie qual plano deseja para gerar o link de pagamento! 🚀"
             )
 
         await client.send_text(phone, upgrade_msg)

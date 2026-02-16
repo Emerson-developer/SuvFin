@@ -29,13 +29,26 @@ class BillingFrequency(str, PyEnum):
     ONE_TIME = "ONE_TIME"
 
 
+class PlanType(str, PyEnum):
+    BASICO = "BASICO"
+    PRO = "PRO"
+    PREMIUM = "PREMIUM"
+
+
+class BillingPeriod(str, PyEnum):
+    MONTHLY = "MONTHLY"
+    ANNUAL = "ANNUAL"
+
+
 # ------------------------------------------------------------------
 # Request schemas
 # ------------------------------------------------------------------
 
 class CreateBillingRequest(BaseModel):
-    """Request para gerar link de pagamento do Premium."""
+    """Request para gerar link de pagamento."""
     phone: str = Field(..., description="Número do WhatsApp do usuário")
+    plan: str = Field("PRO", description="Plano: BASICO, PRO ou PREMIUM")
+    period: str = Field("MONTHLY", description="Período: MONTHLY ou ANNUAL")
     email: Optional[str] = Field(None, description="E-mail do cliente (opcional)")
     name: Optional[str] = Field(None, description="Nome do cliente (opcional)")
     tax_id: Optional[str] = Field(None, description="CPF/CNPJ do cliente (opcional)")
@@ -109,6 +122,8 @@ class CreateBillingResponse(BaseModel):
     payment_url: str
     amount_cents: int
     status: str
+    plan: str = "PRO"
+    period: str = "MONTHLY"
     message: str
 
 
@@ -117,5 +132,7 @@ class PaymentStatusResponse(BaseModel):
     user_phone: str
     license_type: str
     is_premium: bool
+    plan: Optional[str] = None
+    period: Optional[str] = None
     billing_id: Optional[str] = None
     billing_status: Optional[str] = None

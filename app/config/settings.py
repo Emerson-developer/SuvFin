@@ -49,6 +49,18 @@ class Settings(BaseSettings):
     # AbacatePay
     ABACATEPAY_API_KEY: str = ""
     ABACATEPAY_WEBHOOK_SECRET: str = ""
+
+    # Preços dos planos (em centavos)
+    # Mensal
+    PLAN_BASICO_MONTHLY_CENTS: int = 990       # R$ 9,90
+    PLAN_PRO_MONTHLY_CENTS: int = 1990         # R$ 19,90
+    PLAN_PREMIUM_MONTHLY_CENTS: int = 3490     # R$ 34,90
+    # Anual (com 20% de desconto)
+    PLAN_BASICO_ANNUAL_CENTS: int = 9504       # R$ 95,04 (R$ 7,92/mês)
+    PLAN_PRO_ANNUAL_CENTS: int = 19104         # R$ 191,04 (R$ 15,92/mês)
+    PLAN_PREMIUM_ANNUAL_CENTS: int = 33504     # R$ 335,04 (R$ 27,92/mês)
+
+    # Legado (manter para compatibilidade)
     PREMIUM_PRICE_CENTS: int = 990  # R$ 9,90 em centavos
 
     # App URLs

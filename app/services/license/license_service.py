@@ -64,10 +64,23 @@ class LicenseService:
         new_user = await self.create_trial_user(phone, name)
         return new_user, True
 
-    async def upgrade_to_premium(
-        self, user_id: str, abacatepay_customer_id: str = None
+    async def upgrade_to_plan(
+        self,
+        user_id: str,
+        plan: str = "PRO",
+        period: str = "MONTHLY",
+        abacatepay_customer_id: str = None,
     ) -> bool:
-        """Faz upgrade da licença para premium."""
+        """Faz upgrade da licença para o plano escolhido."""
+        from datetime import timedelta
+
+        plan_map = {
+            "BASICO": LicenseType.BASICO,
+            "PRO": LicenseType.PRO,
+            "PREMIUM": LicenseType.PREMIUM,
+        }
+        license_type = plan_map.get(plan.upper(), LicenseType.PRO)
+
         async with async_session() as session:
             stmt = select(User).where(User.id == UUID(user_id))
             result = await session.execute(stmt)
@@ -76,18 +89,35 @@ class LicenseService:
             if not user:
                 return False
 
-            user.license_type = LicenseType.PREMIUM
-            user.license_expires_at = None  # Premium não expira
+            user.license_type = license_type
+
+            # Definir expiração baseada no período
+            if period.upper() == "ANNUAL":
+                user.license_expires_at = date.today() + timedelta(days=365)
+            else:
+                user.license_expires_at = date.today() + timedelta(days=30)
+
             if abacatepay_customer_id:
                 user.abacatepay_customer_id = abacatepay_customer_id
 
             await session.commit()
-            logger.info(f"Upgrade para Premium: {user.phone}")
+            logger.info(f"Upgrade para {plan} ({period}): {user.phone}")
             return True
 
-    async def get_payment_link(self, phone: str) -> str:
+    async def upgrade_to_premium(
+        self, user_id: str, abacatepay_customer_id: str = None
+    ) -> bool:
+        """Legado: redireciona para upgrade_to_plan com PRO."""
+        return await self.upgrade_to_plan(
+            user_id=user_id,
+            plan="PRO",
+            period="MONTHLY",
+            abacatepay_customer_id=abacatepay_customer_id,
+        )
+
+    async def get_payment_link(self, phone: str, plan: str = "PRO", period: str = "MONTHLY") -> str:
         """
-        Gera um link de pagamento Premium via AbacatePay.
+        Gera um link de pagamento via AbacatePay.
         Retorna a URL de pagamento PIX.
         """
         from app.services.payment.abacatepay_service import AbacatePayService
@@ -108,11 +138,13 @@ class LicenseService:
                 return existing.payment_url
 
         # Criar nova cobrança
-        from app.config.settings import settings
         abacatepay = AbacatePayService()
-        billing = await abacatepay.create_premium_billing(
+        price_cents = abacatepay.get_plan_price(plan, period)
+        billing = await abacatepay.create_plan_billing(
             user_id=str(user.id),
             user_phone=phone,
+            plan=plan,
+            period=period,
         )
 
         # Salvar localmente
@@ -120,7 +152,9 @@ class LicenseService:
             payment = Payment(
                 user_id=user.id,
                 abacatepay_billing_id=billing.get("id", ""),
-                amount_cents=settings.PREMIUM_PRICE_CENTS,
+                amount_cents=price_cents,
+                plan_type=plan,
+                billing_period=period,
                 status=PaymentStatus.PENDING,
                 payment_url=billing.get("url", ""),
             )
@@ -158,8 +192,11 @@ class LicenseService:
                 return {
                     "allowed": False,
                     "reason": (
-                        f"Você atingiu o limite de {max_tx} lançamentos do trial. "
-                        f"Faça upgrade para o plano Premium! 🚀"
+                        f"Você atingiu o limite de {max_tx} lançamentos do seu plano. "
+                        f"Faça upgrade para desbloquear mais! 🚀\n\n"
+                        f"⚡ *Pro* — R$ 19,90/mês (ilimitado)\n"
+                        f"👑 *Premium* — R$ 34,90/mês (ilimitado + IA)\n\n"
+                        f"Envie _\"Quero fazer upgrade\"_ para ver as opções!"
                     ),
                     "current": current_count,
                     "limit": max_tx,

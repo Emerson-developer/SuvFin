@@ -209,30 +209,92 @@ class AbacatePayService:
     # Métodos de conveniência
     # ------------------------------------------------------------------
 
-    async def create_premium_billing(
+    # Nomes e descrições dos planos
+    PLAN_INFO = {
+        "BASICO": {
+            "name": "SuvFin Básico",
+            "description": (
+                "Plano Básico SuvFin — Registro de despesas e receitas, "
+                "relatórios mensais básicos, até 100 transações/mês."
+            ),
+        },
+        "PRO": {
+            "name": "SuvFin Pro",
+            "description": (
+                "Plano Pro SuvFin — Transações ilimitadas, relatórios detalhados, "
+                "alertas de gastos, metas financeiras e exportação CSV/PDF."
+            ),
+        },
+        "PREMIUM": {
+            "name": "SuvFin Premium",
+            "description": (
+                "Plano Premium SuvFin — Tudo do Pro + análise preditiva, "
+                "consultoria por IA, múltiplas contas e suporte 24/7."
+            ),
+        },
+    }
+
+    def get_plan_price(self, plan: str, period: str) -> int:
+        """Retorna o preço em centavos para o plano e período."""
+        prices = {
+            ("BASICO", "MONTHLY"): settings.PLAN_BASICO_MONTHLY_CENTS,
+            ("BASICO", "ANNUAL"): settings.PLAN_BASICO_ANNUAL_CENTS,
+            ("PRO", "MONTHLY"): settings.PLAN_PRO_MONTHLY_CENTS,
+            ("PRO", "ANNUAL"): settings.PLAN_PRO_ANNUAL_CENTS,
+            ("PREMIUM", "MONTHLY"): settings.PLAN_PREMIUM_MONTHLY_CENTS,
+            ("PREMIUM", "ANNUAL"): settings.PLAN_PREMIUM_ANNUAL_CENTS,
+        }
+        return prices.get((plan.upper(), period.upper()), settings.PLAN_PRO_MONTHLY_CENTS)
+
+    async def create_plan_billing(
         self,
         user_id: str,
         user_phone: str,
+        plan: str = "PRO",
+        period: str = "MONTHLY",
         customer_id: Optional[str] = None,
         customer_data: Optional[dict] = None,
     ) -> dict:
         """
-        Cria cobrança para upgrade Premium do SuvFin.
-        Retorna o dict da cobrança com a URL de pagamento.
+        Cria cobrança para qualquer plano do SuvFin.
+        plan: BASICO, PRO ou PREMIUM
+        period: MONTHLY ou ANNUAL
         """
+        plan = plan.upper()
+        period = period.upper()
+        info = self.PLAN_INFO.get(plan, self.PLAN_INFO["PRO"])
+        price = self.get_plan_price(plan, period)
+        period_label = "Mensal" if period == "MONTHLY" else "Anual"
+
         return await self.create_billing(
-            product_external_id=f"suvfin-premium-{user_id}",
-            product_name="SuvFin Premium",
-            product_description=(
-                "Plano Premium SuvFin — Lançamentos ilimitados, "
-                "relatórios avançados e suporte prioritário."
-            ),
+            product_external_id=f"suvfin-{plan.lower()}-{period.lower()}-{user_id}",
+            product_name=f"{info['name']} ({period_label})",
+            product_description=info["description"],
             quantity=1,
-            price_cents=settings.PREMIUM_PRICE_CENTS,
+            price_cents=price,
             return_url=f"{settings.APP_URL}/upgrade?phone={user_phone}",
             completion_url=f"{settings.APP_URL}/upgrade/sucesso?phone={user_phone}",
             customer_id=customer_id,
             customer=customer_data,
+        )
+
+    async def create_premium_billing(
+        self,
+        user_id: str,
+        user_phone: str,
+        plan: str = "PRO",
+        period: str = "MONTHLY",
+        customer_id: Optional[str] = None,
+        customer_data: Optional[dict] = None,
+    ) -> dict:
+        """Legado: redireciona para create_plan_billing."""
+        return await self.create_plan_billing(
+            user_id=user_id,
+            user_phone=user_phone,
+            plan=plan,
+            period=period,
+            customer_id=customer_id,
+            customer_data=customer_data,
         )
 
 

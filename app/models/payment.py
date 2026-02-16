@@ -22,6 +22,11 @@ class PaymentStatus(PyEnum):
     REFUNDED = "REFUNDED"
 
 
+class BillingPeriod(PyEnum):
+    MONTHLY = "MONTHLY"
+    ANNUAL = "ANNUAL"
+
+
 class Payment(Base):
     __tablename__ = "payments"
 
@@ -35,6 +40,10 @@ class Payment(Base):
     # AbacatePay IDs
     abacatepay_billing_id = Column(String(100), unique=True, nullable=False, index=True)
     abacatepay_customer_id = Column(String(100), nullable=True)
+
+    # Plano e período
+    plan_type = Column(String(20), nullable=True, default="PREMIUM")  # BASICO, PRO, PREMIUM
+    billing_period = Column(String(20), nullable=True, default="MONTHLY")  # MONTHLY, ANNUAL
 
     # Valores
     amount_cents = Column(Integer, nullable=False)
