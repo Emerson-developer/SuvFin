@@ -228,14 +228,15 @@ class MCPProcessor:
 
         # Roteamento de modelo: Haiku para simples, Sonnet para complexo
         model = _select_model(text)
+        use_tools = model == settings.ANTHROPIC_MODEL
 
-        # Prompt caching: system prompt como bloco cacheável
+        # System prompt: com cache_control apenas para Sonnet
+        # Haiku exige mínimo 2048 tokens para prompt caching
         system = self._build_system_prompt(
-            user_id=user_id, name=name
+            user_id=user_id, name=name, use_cache=use_tools
         )
 
         # Se for Haiku, não mandar tools (economia extra)
-        use_tools = model == settings.ANTHROPIC_MODEL
         tools = TOOL_DEFINITIONS if use_tools else None
 
         try:
@@ -254,15 +255,18 @@ class MCPProcessor:
             tokens_used = await self._track_tokens(phone, response)
 
             # Se Haiku respondeu mas precisa de tool, re-rotear para Sonnet
-            if (
+            first_block = response.content[0] if response.content else None
+            needs_reroute = (
                 not use_tools
                 and response.stop_reason == "end_turn"
+                and first_block
+                and hasattr(first_block, "text")
                 and any(
-                    kw in response.content[0].text.lower()
+                    kw in first_block.text.lower()
                     for kw in ["não consigo", "não tenho acesso", "preciso de"]
-                    if hasattr(response.content[0], "text")
                 )
-            ):
+            )
+            if needs_reroute:
                 logger.info(f"🔄 Re-roteando para Sonnet: {text[:30]}")
                 response = await self.client.messages.create(
                     model=settings.ANTHROPIC_MODEL,
@@ -386,18 +390,18 @@ class MCPProcessor:
     # --- Prompt Caching ---
 
     def _build_system_prompt(
-        self, user_id: str, name: str = "Usuário"
+        self, user_id: str, name: str = "Usuário", use_cache: bool = True
     ) -> list[dict]:
         """
         Constrói system prompt com suporte a prompt caching da Anthropic.
-        O bloco estático é cacheado, e o contexto dinâmico é adicionado separadamente.
+        O bloco estático é cacheado apenas para Sonnet (Haiku exige mín 2048 tokens).
         """
+        static_block: dict = {"type": "text", "text": SYSTEM_PROMPT}
+        if use_cache:
+            static_block["cache_control"] = {"type": "ephemeral"}
+
         return [
-            {
-                "type": "text",
-                "text": SYSTEM_PROMPT,
-                "cache_control": {"type": "ephemeral"},  # Prompt caching
-            },
+            static_block,
             {
                 "type": "text",
                 "text": (
