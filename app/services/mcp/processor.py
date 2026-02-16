@@ -289,8 +289,8 @@ class MCPProcessor:
         await self._save_conversation(phone, "user", text)
         await self._save_conversation(phone, "assistant", result_text)
 
-        # Salvar cache (apenas para respostas sem tool_use)
-        if not tokens_used.get("had_tool_use"):
+        # Salvar cache (apenas para respostas sem tool_use e sem erro)
+        if not tokens_used.get("had_tool_use") and not tokens_used.get("error"):
             await self._cache_response(phone, text, result_text)
 
         logger.info(
