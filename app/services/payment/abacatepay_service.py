@@ -266,14 +266,19 @@ class AbacatePayService:
         price = self.get_plan_price(plan, period)
         period_label = "Mensal" if period == "MONTHLY" else "Anual"
 
+        # Garantir URL válida para o AbacatePay
+        base_url = settings.APP_URL.rstrip("/")
+        if not base_url or not base_url.startswith("http"):
+            base_url = "https://suvfin-production.up.railway.app"
+
         return await self.create_billing(
             product_external_id=f"suvfin-{plan.lower()}-{period.lower()}-{user_id}",
             product_name=f"{info['name']} ({period_label})",
             product_description=info["description"],
             quantity=1,
             price_cents=price,
-            return_url=f"{settings.APP_URL}/upgrade?phone={user_phone}",
-            completion_url=f"{settings.APP_URL}/upgrade/sucesso?phone={user_phone}",
+            return_url=f"{base_url}/upgrade?phone={user_phone}",
+            completion_url=f"{base_url}/upgrade/sucesso?phone={user_phone}",
             customer_id=customer_id,
             customer=customer_data,
         )
