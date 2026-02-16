@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     # Anthropic
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
-    ANTHROPIC_MODEL_LIGHT: str = "claude-3-5-haiku-20241022"
+    ANTHROPIC_MODEL_LIGHT: str = "claude-3-5-haiku-latest"
 
     # Otimização de custos LLM
     LLM_MAX_CONVERSATION_MESSAGES: int = 6  # Histórico de chat (não afeta dados financeiros)

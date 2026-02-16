@@ -254,6 +254,23 @@ class MCPProcessor:
             # Monitorar tokens
             tokens_used = await self._track_tokens(phone, response)
 
+        except anthropic.NotFoundError:
+            # Modelo Haiku indisponível → fallback para Sonnet
+            if model != settings.ANTHROPIC_MODEL:
+                logger.warning(f"⚠️ Modelo {model} indisponível, usando Sonnet")
+                model = settings.ANTHROPIC_MODEL
+                response = await self.client.messages.create(
+                    model=model,
+                    max_tokens=2048,
+                    system=self._build_system_prompt(user_id=user_id, name=name, use_cache=True),
+                    messages=messages,
+                    tools=TOOL_DEFINITIONS,
+                )
+                tokens_used = await self._track_tokens(phone, response)
+                use_tools = True
+            else:
+                raise
+
             # Se Haiku respondeu mas precisa de tool, re-rotear para Sonnet
             first_block = response.content[0] if response.content else None
             needs_reroute = (
