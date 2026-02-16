@@ -281,6 +281,15 @@ class AbacatePayService:
         if not base_url or not base_url.startswith("http"):
             base_url = "https://suvfin-production.up.railway.app"
 
+        # Se não tiver customer_id, enviar dados inline do customer
+        if not customer_id and not customer_data:
+            customer_data = {
+                "name": f"User {user_phone}",
+                "cellphone": user_phone,
+                "email": f"{user_phone}@suvfin.user",
+                "taxId": "00000000000",
+            }
+
         return await self.create_billing(
             product_external_id=f"suvfin-{plan.lower()}-{period.lower()}-{user_id}",
             product_name=f"{info['name']} ({period_label})",

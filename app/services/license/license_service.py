@@ -140,11 +140,39 @@ class LicenseService:
         # Criar nova cobrança
         abacatepay = AbacatePayService()
         price_cents = abacatepay.get_plan_price(plan, period)
+
+        # Garantir que o customer existe no AbacatePay
+        customer_id = user.abacatepay_customer_id
+        if not customer_id:
+            try:
+                customer_data = await abacatepay.create_customer(
+                    name=user.name or f"User {phone}",
+                    cellphone=phone,
+                    email=f"{phone}@suvfin.user",
+                    tax_id="00000000000",
+                )
+                customer_id = customer_data.get("id")
+                # Salvar o customer_id no usuário
+                if customer_id:
+                    async with async_session() as session:
+                        from sqlalchemy import update
+                        await session.execute(
+                            update(User)
+                            .where(User.phone == phone)
+                            .values(abacatepay_customer_id=customer_id)
+                        )
+                        await session.commit()
+                    logger.info(f"🥑 Customer AbacatePay criado para {phone}: {customer_id}")
+            except Exception as e:
+                logger.warning(f"Falha ao criar customer no AbacatePay: {e}")
+                customer_id = None
+
         billing = await abacatepay.create_plan_billing(
             user_id=str(user.id),
             user_phone=phone,
             plan=plan,
             period=period,
+            customer_id=customer_id,
         )
 
         if not billing or not isinstance(billing, dict):
