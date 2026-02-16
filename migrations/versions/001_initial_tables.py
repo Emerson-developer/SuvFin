@@ -19,112 +19,83 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Criar enums primeiro (só se não existirem)
+    op.execute("DO $$ BEGIN CREATE TYPE licensetype AS ENUM ('FREE_TRIAL', 'PREMIUM'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;")
+    op.execute("DO $$ BEGIN CREATE TYPE transactiontype AS ENUM ('INCOME', 'EXPENSE'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;")
+    op.execute("DO $$ BEGIN CREATE TYPE paymentstatus AS ENUM ('PENDING', 'PAID', 'EXPIRED', 'CANCELLED', 'REFUNDED'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;")
+
     # === Users ===
-    op.create_table(
-        'users',
-        sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column('phone', sa.String(20), unique=True, nullable=False, index=True),
-        sa.Column('name', sa.String(100), nullable=True),
-        sa.Column(
-            'license_type',
-            sa.Enum('FREE_TRIAL', 'BASICO', 'PRO', 'PREMIUM', name='licensetype'),
-            nullable=False,
-            server_default='FREE_TRIAL',
-        ),
-        sa.Column('license_expires_at', sa.Date(), nullable=True),
-        sa.Column('is_active', sa.Boolean(), server_default=sa.text('true')),
-        sa.Column('abacatepay_customer_id', sa.String(100), nullable=True),
-        sa.Column('created_at', sa.DateTime(), nullable=True),
-        sa.Column('updated_at', sa.DateTime(), nullable=True),
-    )
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id UUID PRIMARY KEY,
+            phone VARCHAR(20) UNIQUE NOT NULL,
+            name VARCHAR(100),
+            license_type licensetype NOT NULL DEFAULT 'FREE_TRIAL',
+            license_expires_at DATE,
+            is_active BOOLEAN DEFAULT true,
+            abacatepay_customer_id VARCHAR(100),
+            created_at TIMESTAMP,
+            updated_at TIMESTAMP
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_users_phone ON users(phone)")
 
     # === Categories ===
-    op.create_table(
-        'categories',
-        sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column('name', sa.String(50), nullable=False),
-        sa.Column('emoji', sa.String(10), nullable=True),
-        sa.Column('color', sa.String(7), nullable=True),
-        sa.Column('is_default', sa.Boolean(), server_default=sa.text('true')),
-        sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column('created_at', sa.DateTime(), nullable=True),
-    )
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS categories (
+            id UUID PRIMARY KEY,
+            name VARCHAR(50) NOT NULL,
+            emoji VARCHAR(10),
+            color VARCHAR(7),
+            is_default BOOLEAN DEFAULT true,
+            user_id UUID,
+            created_at TIMESTAMP
+        )
+    """)
 
     # === Transactions ===
-    op.create_table(
-        'transactions',
-        sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column(
-            'user_id',
-            postgresql.UUID(as_uuid=True),
-            sa.ForeignKey('users.id'),
-            nullable=False,
-            index=True,
-        ),
-        sa.Column(
-            'type',
-            sa.Enum('INCOME', 'EXPENSE', name='transactiontype'),
-            nullable=False,
-        ),
-        sa.Column('amount', sa.Numeric(12, 2), nullable=False),
-        sa.Column('description', sa.String(255), nullable=True),
-        sa.Column('date', sa.Date(), nullable=False),
-        sa.Column(
-            'category_id',
-            postgresql.UUID(as_uuid=True),
-            sa.ForeignKey('categories.id'),
-            nullable=True,
-        ),
-        sa.Column('receipt_url', sa.Text(), nullable=True),
-        sa.Column('created_at', sa.DateTime(), nullable=True),
-        sa.Column('updated_at', sa.DateTime(), nullable=True),
-        sa.Column('deleted_at', sa.DateTime(), nullable=True),
-    )
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS transactions (
+            id UUID PRIMARY KEY,
+            user_id UUID NOT NULL REFERENCES users(id),
+            type transactiontype NOT NULL,
+            amount NUMERIC(12, 2) NOT NULL,
+            description VARCHAR(255),
+            date DATE NOT NULL,
+            category_id UUID REFERENCES categories(id),
+            receipt_url TEXT,
+            created_at TIMESTAMP,
+            updated_at TIMESTAMP,
+            deleted_at TIMESTAMP
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_transactions_user_id ON transactions(user_id)")
 
     # === Payments ===
-    op.create_table(
-        'payments',
-        sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column(
-            'user_id',
-            postgresql.UUID(as_uuid=True),
-            sa.ForeignKey('users.id', ondelete='CASCADE'),
-            nullable=False,
-            index=True,
-        ),
-        sa.Column(
-            'abacatepay_billing_id',
-            sa.String(100),
-            unique=True,
-            nullable=False,
-            index=True,
-        ),
-        sa.Column('abacatepay_customer_id', sa.String(100), nullable=True),
-        sa.Column('plan_type', sa.String(20), nullable=True, server_default='PRO'),
-        sa.Column('billing_period', sa.String(20), nullable=True, server_default='MONTHLY'),
-        sa.Column('amount_cents', sa.Integer(), nullable=False),
-        sa.Column(
-            'status',
-            sa.Enum(
-                'PENDING', 'PAID', 'EXPIRED', 'CANCELLED', 'REFUNDED',
-                name='paymentstatus',
-            ),
-            nullable=False,
-            server_default='PENDING',
-        ),
-        sa.Column('payment_method', sa.String(20), server_default='PIX'),
-        sa.Column('payment_url', sa.Text(), nullable=True),
-        sa.Column('created_at', sa.DateTime(), nullable=True),
-        sa.Column('paid_at', sa.DateTime(), nullable=True),
-        sa.Column('updated_at', sa.DateTime(), nullable=True),
-    )
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS payments (
+            id UUID PRIMARY KEY,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            abacatepay_billing_id VARCHAR(100) UNIQUE NOT NULL,
+            abacatepay_customer_id VARCHAR(100),
+            amount_cents INTEGER NOT NULL,
+            status paymentstatus NOT NULL DEFAULT 'PENDING',
+            payment_method VARCHAR(20) DEFAULT 'PIX',
+            payment_url TEXT,
+            created_at TIMESTAMP,
+            paid_at TIMESTAMP,
+            updated_at TIMESTAMP
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_payments_user_id ON payments(user_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_payments_abacatepay_billing_id ON payments(abacatepay_billing_id)")
 
 
 def downgrade() -> None:
-    op.drop_table('payments')
-    op.drop_table('transactions')
-    op.drop_table('categories')
-    op.drop_table('users')
+    op.execute('DROP TABLE IF EXISTS payments')
+    op.execute('DROP TABLE IF EXISTS transactions')
+    op.execute('DROP TABLE IF EXISTS categories')
+    op.execute('DROP TABLE IF EXISTS users')
     op.execute('DROP TYPE IF EXISTS paymentstatus')
     op.execute('DROP TYPE IF EXISTS transactiontype')
     op.execute('DROP TYPE IF EXISTS licensetype')
