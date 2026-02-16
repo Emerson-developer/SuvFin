@@ -45,6 +45,20 @@ class WhatsAppParser:
                 caption = msg.get("document", {}).get("caption")
             elif msg_type == "audio":
                 content = msg.get("audio", {}).get("id", "")
+            elif msg_type == "interactive":
+                interactive = msg.get("interactive", {})
+                itype = interactive.get("type", "")
+                if itype == "list_reply":
+                    reply = interactive.get("list_reply", {})
+                    content = reply.get("id", "")
+                    caption = reply.get("title", "")
+                elif itype == "button_reply":
+                    reply = interactive.get("button_reply", {})
+                    content = reply.get("id", "")
+                    caption = reply.get("title", "")
+                else:
+                    logger.warning(f"Tipo interativo não suportado: {itype}")
+                    return None
             else:
                 logger.warning(f"Tipo de mensagem não suportado: {msg_type}")
                 return None

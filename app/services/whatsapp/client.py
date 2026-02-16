@@ -87,6 +87,51 @@ class WhatsAppClient:
             response.raise_for_status()
             return response.json()
 
+    async def send_interactive_list(
+        self,
+        to: str,
+        header_text: str,
+        body_text: str,
+        footer_text: str,
+        button_text: str,
+        sections: list[dict],
+    ) -> dict:
+        """
+        Envia mensagem interativa com lista de opções (máx 10 itens).
+        sections = [{"title": "Seção", "rows": [{"id": "x", "title": "T", "description": "D"}]}]
+        """
+        url = f"{self.base_url}/{self.phone_id}/messages"
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": to,
+            "type": "interactive",
+            "interactive": {
+                "type": "list",
+                "header": {"type": "text", "text": header_text},
+                "body": {"text": body_text},
+                "footer": {"text": footer_text},
+                "action": {
+                    "button": button_text,
+                    "sections": sections,
+                },
+            },
+        }
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            try:
+                response = await client.post(url, json=payload, headers=self.headers)
+                response.raise_for_status()
+                data = response.json()
+                logger.info(f"Lista interativa enviada para {to}: {data}")
+                return data
+            except httpx.HTTPStatusError as e:
+                logger.error(
+                    f"Erro ao enviar lista interativa para {to}: "
+                    f"{e.response.status_code} - {e.response.text}"
+                )
+                raise
+
     async def mark_as_read(self, message_id: str) -> dict:
         """Marca uma mensagem como lida (blue ticks)."""
         url = f"{self.base_url}/{self.phone_id}/messages"
