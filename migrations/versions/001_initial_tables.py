@@ -27,7 +27,7 @@ def upgrade() -> None:
         sa.Column('name', sa.String(100), nullable=True),
         sa.Column(
             'license_type',
-            sa.Enum('FREE_TRIAL', 'PREMIUM', name='licensetype'),
+            sa.Enum('FREE_TRIAL', 'BASICO', 'PRO', 'PREMIUM', name='licensetype'),
             nullable=False,
             server_default='FREE_TRIAL',
         ),
@@ -100,6 +100,8 @@ def upgrade() -> None:
             index=True,
         ),
         sa.Column('abacatepay_customer_id', sa.String(100), nullable=True),
+        sa.Column('plan_type', sa.String(20), nullable=True, server_default='PRO'),
+        sa.Column('billing_period', sa.String(20), nullable=True, server_default='MONTHLY'),
         sa.Column('amount_cents', sa.Integer(), nullable=False),
         sa.Column(
             'status',
