@@ -2,6 +2,8 @@
 Rotas do Webhook do WhatsApp (Meta Cloud API).
 """
 
+import re
+
 from fastapi import APIRouter, Request, Response, Query, HTTPException, BackgroundTasks
 from loguru import logger
 
@@ -51,6 +53,33 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
     background_tasks.add_task(_process_webhook, payload)
 
     return {"status": "received"}
+
+
+def _detect_plan_selection(text: str) -> tuple[str, str] | None:
+    """
+    Detecta se o usuário está escolhendo um plano pelo texto da mensagem.
+    Retorna (plan, period) ou None.
+    """
+    t = text.lower().strip()
+    # Normalizar acentos comuns
+    t = t.replace("á", "a").replace("é", "e").replace("í", "i")
+
+    plan = None
+    if re.search(r"\bbasico\b", t):
+        plan = "BASICO"
+    elif re.search(r"\bpremium\b", t):
+        plan = "PREMIUM"
+    elif re.search(r"\bpro\b", t):
+        plan = "PRO"
+
+    if not plan:
+        return None
+
+    period = "MONTHLY"
+    if re.search(r"\banual\b|\banuais\b|\bano\b|\bannual\b", t):
+        period = "ANNUAL"
+
+    return (plan, period)
 
 
 async def _process_webhook(payload: dict):
@@ -113,35 +142,87 @@ async def _process_webhook(payload: dict):
         return
 
     if not user.is_license_valid:
-        # Gerar link de pagamento PIX via AbacatePay (plano Pro como padrão)
-        try:
-            payment_url = await license_service.get_payment_link(phone, plan="PRO", period="MONTHLY")
-            upgrade_msg = (
-                "⏰ Seu período de teste expirou!\n\n"
-                "Escolha um plano para continuar usando o SuvFin:\n\n"
-                "⭐ *Básico* — R$ 9,90/mês\n"
-                "  100 transações/mês, relatórios básicos\n\n"
-                "⚡ *Pro* — R$ 19,90/mês _(mais popular!)_\n"
-                "  Transações ilimitadas, relatórios detalhados, alertas\n\n"
-                "👑 *Premium* — R$ 34,90/mês\n"
-                "  Tudo do Pro + análise preditiva, consultoria por IA\n\n"
-                "💡 _Planos anuais têm 20% de desconto!_\n\n"
-                f"🔗 Assine o plano Pro agora: {payment_url}\n\n"
-                "Para escolher outro plano, envie:\n"
-                '  _"Quero o plano Básico"_\n'
-                '  _"Quero o plano Premium"_\n'
-                '  _"Quero plano anual"_'
-            )
-        except Exception as e:
-            logger.error(f"Erro ao gerar link de pagamento: {e}")
-            upgrade_msg = (
-                "⏰ Seu período de teste expirou!\n\n"
-                "Para continuar usando o SuvFin, escolha um plano:\n\n"
-                "⭐ *Básico* — R$ 9,90/mês\n"
-                "⚡ *Pro* — R$ 19,90/mês\n"
-                "👑 *Premium* — R$ 34,90/mês\n\n"
-                "Envie qual plano deseja para gerar o link de pagamento! 🚀"
-            )
+        # Verificar se o usuário está escolhendo um plano
+        if msg_type == "text" and isinstance(content, str):
+            selected = _detect_plan_selection(content)
+            if selected:
+                plan, period = selected
+                try:
+                    payment_url = await license_service.get_payment_link(
+                        phone, plan=plan, period=period
+                    )
+                    plan_names = {"BASICO": "Básico", "PRO": "Pro", "PREMIUM": "Premium"}
+                    period_label = "mensal" if period == "MONTHLY" else "anual"
+                    prices = {
+                        ("BASICO", "MONTHLY"): "R$ 9,90/mês",
+                        ("BASICO", "ANNUAL"): "R$ 7,92/mês (cobrado anualmente R$ 95,04)",
+                        ("PRO", "MONTHLY"): "R$ 19,90/mês",
+                        ("PRO", "ANNUAL"): "R$ 15,92/mês (cobrado anualmente R$ 191,04)",
+                        ("PREMIUM", "MONTHLY"): "R$ 34,90/mês",
+                        ("PREMIUM", "ANNUAL"): "R$ 27,92/mês (cobrado anualmente R$ 335,04)",
+                    }
+                    price_str = prices.get((plan, period), "")
+
+                    features = {
+                        "BASICO": (
+                            "✅ Registro de despesas e receitas\n"
+                            "✅ Relatórios mensais básicos\n"
+                            "✅ Categorias automáticas\n"
+                            "✅ Até 100 transações/mês\n"
+                            "✅ Suporte por WhatsApp"
+                        ),
+                        "PRO": (
+                            "✅ Tudo do plano Básico\n"
+                            "✅ Transações ilimitadas\n"
+                            "✅ Relatórios detalhados e comparativos\n"
+                            "✅ Alertas inteligentes de gastos\n"
+                            "✅ Metas financeiras personalizadas\n"
+                            "✅ Reconhecimento de notas fiscais\n"
+                            "✅ Exportação de dados (CSV/PDF)"
+                        ),
+                        "PREMIUM": (
+                            "✅ Tudo do plano Pro\n"
+                            "✅ Integração Open Finance (em breve)\n"
+                            "✅ Análise preditiva de gastos\n"
+                            "✅ Consultoria financeira por IA\n"
+                            "✅ Múltiplas contas e cartões\n"
+                            "✅ Relatórios personalizados\n"
+                            "✅ Suporte prioritário 24/7\n"
+                            "✅ Acesso antecipado a novidades"
+                        ),
+                    }
+
+                    plan_msg = (
+                        f"✨ *Plano {plan_names[plan]} ({period_label})*\n"
+                        f"💰 {price_str}\n\n"
+                        f"O que está incluso:\n"
+                        f"{features[plan]}\n\n"
+                        f"🔗 Pague agora via PIX:\n{payment_url}\n\n"
+                        f"O pagamento é processado instantaneamente! 🥑"
+                    )
+                    await client.send_text(phone, plan_msg)
+                    logger.info(f"💳 Link gerado para {phone}: {plan} {period_label}")
+                    return
+                except Exception as e:
+                    logger.error(f"Erro ao gerar link para plano {plan}: {e}")
+
+        # Mensagem genérica de expiração (primeira vez ou sem seleção válida)
+        upgrade_msg = (
+            "⏰ *Seu período de teste expirou!*\n\n"
+            "Escolha um plano para continuar usando o SuvFin:\n\n"
+            "⭐ *Básico* — R$ 9,90/mês\n"
+            "   Registro de despesas, relatórios básicos, até 100 transações\n\n"
+            "⚡ *Pro* — R$ 19,90/mês _(mais popular!)_\n"
+            "   Transações ilimitadas, relatórios detalhados, alertas, metas\n\n"
+            "👑 *Premium* — R$ 34,90/mês\n"
+            "   Tudo do Pro + análise preditiva, consultoria IA, suporte 24/7\n\n"
+            "💡 _Planos anuais têm 20% de desconto!_\n\n"
+            "Para assinar, envie o plano que deseja:\n"
+            '   _"Quero o Básico"_\n'
+            '   _"Quero o Pro"_\n'
+            '   _"Quero o Premium"_\n'
+            '   _"Quero o Pro anual"_'
+        )
 
         await client.send_text(phone, upgrade_msg)
         return
