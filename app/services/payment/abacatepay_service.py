@@ -60,8 +60,18 @@ class AbacatePayService:
 
             if response.status_code == 200:
                 data = response.json()
-                logger.info(f"🥑 Cliente criado no AbacatePay: {data.get('data', {}).get('id')}")
-                return data.get("data", {})
+                customer = data.get("data") or {}
+                if not customer:
+                    logger.error(
+                        f"❌ AbacatePay retornou resposta sem dados de cliente: {data}"
+                    )
+                    raise AbacatePayError(
+                        f"Resposta sem dados de cliente: {data.get('error', 'unknown')}",
+                        status_code=response.status_code,
+                        response_body=response.text,
+                    )
+                logger.info(f"🥑 Cliente criado no AbacatePay: {customer.get('id')}")
+                return customer
             else:
                 logger.error(
                     f"❌ Erro ao criar cliente AbacatePay: "
@@ -281,14 +291,8 @@ class AbacatePayService:
         if not base_url or not base_url.startswith("http"):
             base_url = "https://suvfin-production.up.railway.app"
 
-        # Se não tiver customer_id, enviar dados inline do customer
-        if not customer_id and not customer_data:
-            customer_data = {
-                "name": f"User {user_phone}",
-                "cellphone": user_phone,
-                "email": f"{user_phone}@suvfin.user",
-                "taxId": "00000000000",
-            }
+        # Customer é opcional na API do AbacatePay
+        # Só enviar se tivermos customer_id ou customer_data válidos
 
         return await self.create_billing(
             product_external_id=f"suvfin-{plan.lower()}-{period.lower()}-{user_id}",
@@ -298,8 +302,8 @@ class AbacatePayService:
             price_cents=price,
             return_url=f"{base_url}/upgrade?phone={user_phone}",
             completion_url=f"{base_url}/upgrade/sucesso?phone={user_phone}",
-            customer_id=customer_id,
-            customer=customer_data,
+            customer_id=customer_id if customer_id else None,
+            customer=customer_data if customer_data else None,
         )
 
     async def create_premium_billing(
