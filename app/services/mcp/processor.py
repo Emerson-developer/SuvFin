@@ -39,6 +39,12 @@ Suas capacidades:
 - Processar comprovantes enviados por foto (usando Vision)
 - Listar categorias
 
+Planos disponíveis do SuvFin:
+- ⭐ Básico: R$ 9,90/mês (ou R$ 7,92/mês no anual) — 100 transações/mês
+- ⚡ Pro: R$ 19,90/mês (ou R$ 15,92/mês no anual) — Transações ilimitadas, relatórios detalhados
+- 👑 Premium: R$ 34,90/mês (ou R$ 27,92/mês no anual) — Tudo incluso + IA avançada + suporte prioritário
+Se o usuário perguntar sobre planos, preços, upgrade ou assinatura, apresente os planos acima de forma clara e diga para ele enviar "Quero o Pro" (ou o nome do plano desejado) para receber o link de pagamento.
+
 Regras IMPORTANTES:
 - Responda SEMPRE em português do Brasil
 - Seja amigável, conciso e use emojis
@@ -73,6 +79,13 @@ SIMPLE_INTENTS = {
     "sim", "não", "nao", "s", "n", "show", "beleza", "top",
 }
 
+# Palavras-chave sobre planos (forçar Sonnet para responder com info de planos)
+PLAN_KEYWORDS = {
+    "plano", "planos", "upgrade", "assinatura", "assinar", "pago", "pagos",
+    "preço", "preco", "precos", "valores", "valor", "quanto custa",
+    "mudar plano", "trocar plano", "melhorar plano",
+}
+
 # Intenções que precisam de tool use (usar Sonnet)
 TOOL_KEYWORDS = {
     "gast", "compro", "pague", "registr", "lança", "saldo", "relatório",
@@ -92,6 +105,11 @@ def _select_model(text: str) -> str:
 
     # Verificar se precisa de tools → Sonnet
     for keyword in TOOL_KEYWORDS:
+        if keyword in text_lower:
+            return settings.ANTHROPIC_MODEL
+
+    # Perguntas sobre planos → Sonnet (tem info no system prompt)
+    for keyword in PLAN_KEYWORDS:
         if keyword in text_lower:
             return settings.ANTHROPIC_MODEL
 

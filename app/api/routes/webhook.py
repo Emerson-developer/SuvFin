@@ -82,6 +82,44 @@ def _detect_plan_selection(text: str) -> tuple[str, str] | None:
     return (plan, period)
 
 
+def _is_plan_inquiry(text: str) -> bool:
+    """
+    Detecta se o usuário está perguntando sobre planos/upgrade/assinatura.
+    Retorna True se a mensagem é sobre planos.
+    """
+    t = text.lower().strip()
+    t = t.replace("á", "a").replace("é", "e").replace("í", "i")
+    t = t.replace("ã", "a").replace("ç", "c").replace("ú", "u").replace("ó", "o")
+
+    plan_patterns = [
+        r"\bplanos?\b",
+        r"\bupgrade\b",
+        r"\bassinatura\b",
+        r"\bassinar\b",
+        r"\bpagos?\b",
+        r"\bprecos?\b",
+        r"\bvalores?\b",
+        r"\bquanto\s+custa\b",
+        r"\bmudar\s+plano\b",
+        r"\btrocar\s+plano\b",
+        r"\bmelhorar\s+plano\b",
+        r"\bquero\s+(fazer\s+)?upgrade\b",
+        r"\bver\s+(os\s+)?planos?\b",
+        r"\bsaber\s+(os\s+)?planos?\b",
+        r"\bconhecer\s+(os\s+)?planos?\b",
+        r"\bquais\s+(sao\s+)?(os\s+)?planos?\b",
+        r"\bopcoes\s+de\s+plano\b",
+        r"\bplano\s+pago\b",
+        r"\bplanos\s+pagos\b",
+        r"\bplanos\s+disponiveis\b",
+    ]
+
+    for pattern in plan_patterns:
+        if re.search(pattern, t):
+            return True
+    return False
+
+
 async def _send_plan_list(phone: str, client: WhatsAppClient) -> None:
     """Envia lista interativa com os planos disponíveis."""
     try:
@@ -150,6 +188,88 @@ async def _send_plan_list(phone: str, client: WhatsAppClient) -> None:
                 "⭐ *Básico* — R$ 9,90/mês\n"
                 "⚡ *Pro* — R$ 19,90/mês _(mais popular!)_\n"
                 "👑 *Premium* — R$ 34,90/mês\n\n"
+                "💡 Planos anuais com 20% de desconto!\n\n"
+                'Envie: _"Quero o Pro"_ ou _"Quero o Básico anual"_'
+            ),
+        )
+
+
+async def _send_plan_list_active_user(phone: str, user, client: WhatsAppClient) -> None:
+    """Envia lista de planos para usuário ativo que quer ver opções/upgrade."""
+    current_plan = user.license_type.value if user.license_type else "FREE_TRIAL"
+    plan_labels = {
+        "FREE_TRIAL": "Teste Grátis",
+        "BASICO": "⭐ Básico",
+        "PRO": "⚡ Pro",
+        "PREMIUM": "👑 Premium",
+    }
+    current_label = plan_labels.get(current_plan, current_plan)
+
+    try:
+        await client.send_interactive_list(
+            to=phone,
+            header_text="Nossos Planos",
+            body_text=(
+                f"Seu plano atual: *{current_label}*\n\n"
+                "Confira os planos disponíveis para upgrade:\n\n"
+                "💡 Planos anuais têm 20% de desconto!"
+            ),
+            footer_text="SuvFin — Seu financeiro no WhatsApp",
+            button_text="Ver Planos",
+            sections=[
+                {
+                    "title": "Planos Mensais",
+                    "rows": [
+                        {
+                            "id": "plan_basico_monthly",
+                            "title": "Básico Mensal",
+                            "description": "R$ 9,90/mês • 100 transações",
+                        },
+                        {
+                            "id": "plan_pro_monthly",
+                            "title": "Pro Mensal",
+                            "description": "R$ 19,90/mês • Ilimitado",
+                        },
+                        {
+                            "id": "plan_premium_monthly",
+                            "title": "Premium Mensal",
+                            "description": "R$ 34,90/mês • Tudo incluso",
+                        },
+                    ],
+                },
+                {
+                    "title": "Planos Anuais (-20%)",
+                    "rows": [
+                        {
+                            "id": "plan_basico_annual",
+                            "title": "Básico Anual",
+                            "description": "R$ 7,92/mês • Economia de 20%",
+                        },
+                        {
+                            "id": "plan_pro_annual",
+                            "title": "Pro Anual",
+                            "description": "R$ 15,92/mês • Economia de 20%",
+                        },
+                        {
+                            "id": "plan_premium_annual",
+                            "title": "Premium Anual",
+                            "description": "R$ 27,92/mês • Economia de 20%",
+                        },
+                    ],
+                },
+            ],
+        )
+        logger.info(f"📋 Lista de planos enviada para usuário ativo {phone}")
+    except Exception as e:
+        logger.error(f"Erro ao enviar lista interativa para {phone}: {e}")
+        # Fallback: texto simples
+        await client.send_text(
+            phone,
+            (
+                f"📋 *Planos SuvFin* (seu plano atual: {current_label})\n\n"
+                "⭐ *Básico* — R$ 9,90/mês (100 transações)\n"
+                "⚡ *Pro* — R$ 19,90/mês _(mais popular! Ilimitado)_\n"
+                "👑 *Premium* — R$ 34,90/mês _(Tudo incluso + IA)_\n\n"
                 "💡 Planos anuais com 20% de desconto!\n\n"
                 'Envie: _"Quero o Pro"_ ou _"Quero o Básico anual"_'
             ),
@@ -307,6 +427,20 @@ async def _process_webhook(payload: dict):
         # Enviar lista interativa de planos
         await _send_plan_list(phone, client)
         return
+
+    # ── Usuário ativo perguntando sobre planos/upgrade ──
+    if msg_type == "text" and isinstance(content, str):
+        # Primeiro checar se está selecionando um plano específico
+        selected = _detect_plan_selection(content)
+        if selected:
+            plan, period = selected
+            await _handle_plan_selection(phone, f"plan_{plan.lower()}_{period.lower()}", client)
+            return
+
+        # Depois checar se está perguntando sobre planos em geral
+        if _is_plan_inquiry(content):
+            await _send_plan_list_active_user(phone, user, client)
+            return
 
     # Processar com MCP + LLM
     processor = MCPProcessor()
