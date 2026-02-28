@@ -231,40 +231,36 @@ class AbacatePayService:
 
     # Nomes e descrições dos planos
     PLAN_INFO = {
-        "BASICO": {
-            "name": "SuvFin Básico",
+        "MONTHLY": {
+            "name": "SuvFin Mensal",
             "description": (
-                "Plano Básico SuvFin — Registro de despesas e receitas, "
-                "relatórios mensais básicos, até 100 transações/mês."
+                "Plano Mensal SuvFin — Registros ilimitados, relatórios avançados, "
+                "suporte prioritário, cancele quando quiser."
             ),
         },
+        "ANNUAL": {
+            "name": "SuvFin Anual",
+            "description": (
+                "Plano Anual SuvFin — Tudo do mensal + economia de R$ 48,80/ano, "
+                "suporte VIP, novos recursos primeiro, 2 meses grátis."
+            ),
+        },
+        # Legado (compatibilidade)
         "PRO": {
             "name": "SuvFin Pro",
             "description": (
-                "Plano Pro SuvFin — Transações ilimitadas, relatórios detalhados, "
+                "Plano SuvFin — Transações ilimitadas, relatórios detalhados, "
                 "alertas de gastos, metas financeiras e exportação CSV/PDF."
-            ),
-        },
-        "PREMIUM": {
-            "name": "SuvFin Premium",
-            "description": (
-                "Plano Premium SuvFin — Tudo do Pro + análise preditiva, "
-                "consultoria por IA, múltiplas contas e suporte 24/7."
             ),
         },
     }
 
     def get_plan_price(self, plan: str, period: str) -> int:
-        """Retorna o preço em centavos para o plano e período."""
-        prices = {
-            ("BASICO", "MONTHLY"): settings.PLAN_BASICO_MONTHLY_CENTS,
-            ("BASICO", "ANNUAL"): settings.PLAN_BASICO_ANNUAL_CENTS,
-            ("PRO", "MONTHLY"): settings.PLAN_PRO_MONTHLY_CENTS,
-            ("PRO", "ANNUAL"): settings.PLAN_PRO_ANNUAL_CENTS,
-            ("PREMIUM", "MONTHLY"): settings.PLAN_PREMIUM_MONTHLY_CENTS,
-            ("PREMIUM", "ANNUAL"): settings.PLAN_PREMIUM_ANNUAL_CENTS,
-        }
-        return prices.get((plan.upper(), period.upper()), settings.PLAN_PRO_MONTHLY_CENTS)
+        """Retorna o preço em centavos para o período."""
+        period = period.upper()
+        if period == "ANNUAL":
+            return settings.PLAN_ANNUAL_CENTS
+        return settings.PLAN_MONTHLY_CENTS
 
     async def create_plan_billing(
         self,
@@ -276,13 +272,11 @@ class AbacatePayService:
         customer_data: Optional[dict] = None,
     ) -> dict:
         """
-        Cria cobrança para qualquer plano do SuvFin.
-        plan: BASICO, PRO ou PREMIUM
+        Cria cobrança para o SuvFin.
         period: MONTHLY ou ANNUAL
         """
-        plan = plan.upper()
         period = period.upper()
-        info = self.PLAN_INFO.get(plan, self.PLAN_INFO["PRO"])
+        info = self.PLAN_INFO.get(period, self.PLAN_INFO["MONTHLY"])
         price = self.get_plan_price(plan, period)
         period_label = "Mensal" if period == "MONTHLY" else "Anual"
 
@@ -295,7 +289,7 @@ class AbacatePayService:
         # Só enviar se tivermos customer_id ou customer_data válidos
 
         return await self.create_billing(
-            product_external_id=f"suvfin-{plan.lower()}-{period.lower()}-{user_id}",
+            product_external_id=f"suvfin-{period.lower()}-{user_id}",
             product_name=f"{info['name']} ({period_label})",
             product_description=info["description"],
             quantity=1,

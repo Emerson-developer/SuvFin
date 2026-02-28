@@ -71,15 +71,11 @@ class LicenseService:
         period: str = "MONTHLY",
         abacatepay_customer_id: str = None,
     ) -> bool:
-        """Faz upgrade da licença para o plano escolhido."""
+        """Faz upgrade da licença (Mensal ou Anual)."""
         from datetime import timedelta
 
-        plan_map = {
-            "BASICO": LicenseType.BASICO,
-            "PRO": LicenseType.PRO,
-            "PREMIUM": LicenseType.PREMIUM,
-        }
-        license_type = plan_map.get(plan.upper(), LicenseType.PRO)
+        # Plano único — todos viram PRO
+        license_type = LicenseType.PRO
 
         async with async_session() as session:
             stmt = select(User).where(User.id == UUID(user_id))
@@ -115,28 +111,23 @@ class LicenseService:
             abacatepay_customer_id=abacatepay_customer_id,
         )
 
-    # Links fixos de pagamento pré-criados no AbacatePay
+    # Links fixos de pagamento (Asaas)
     PAYMENT_LINKS = {
-        ("BASICO", "MONTHLY"): "https://app.abacatepay.com/pay/bill_ugcAJz0p6j0Bmz4FSeBPEEdh",
-        ("BASICO", "ANNUAL"): "https://app.abacatepay.com/pay/bill_HUMtfuQQ4yTga0bXDrdx5aFq",
-        ("PRO", "MONTHLY"): "https://app.abacatepay.com/pay/bill_bLp1mFcbztXSqZBgy2dQtSQK",
-        ("PRO", "ANNUAL"): "https://app.abacatepay.com/pay/bill_mMYEMuYcXUWt0gLwyED2GrnM",
-        ("PREMIUM", "MONTHLY"): "https://app.abacatepay.com/pay/bill_aPmMZjhfECMXhfWBtUrWsa1T",
-        ("PREMIUM", "ANNUAL"): "https://app.abacatepay.com/pay/bill_phz1JkKGHP4FHLsbYhfXTAF6",
+        "MONTHLY": "https://www.asaas.com/c/pnt6apfbhi9zckue",
+        "ANNUAL": "https://www.asaas.com/c/2gmw4vugggq3974z",
     }
 
     async def get_payment_link(self, phone: str, plan: str = "PRO", period: str = "MONTHLY") -> str:
         """
-        Retorna o link de pagamento fixo do AbacatePay para o plano selecionado.
+        Retorna o link de pagamento (Asaas) para o período selecionado.
         """
-        plan = plan.upper()
         period = period.upper()
 
-        url = self.PAYMENT_LINKS.get((plan, period))
+        url = self.PAYMENT_LINKS.get(period)
         if not url:
-            raise ValueError(f"Plano inválido: {plan} {period}")
+            raise ValueError(f"Período inválido: {period}")
 
-        logger.info(f"💳 Link de pagamento para {phone}: {plan} {period} → {url}")
+        logger.info(f"💳 Link de pagamento para {phone}: {period} → {url}")
         return url
 
     async def check_transaction_limit(self, user_id: str) -> dict:
@@ -170,8 +161,8 @@ class LicenseService:
                     "reason": (
                         f"Você atingiu o limite de {max_tx} lançamentos do seu plano. "
                         f"Faça upgrade para desbloquear mais! 🚀\n\n"
-                        f"⚡ *Pro* — R$ 19,90/mês (ilimitado)\n"
-                        f"👑 *Premium* — R$ 34,90/mês (ilimitado + IA)\n\n"
+                        f"🟢 *Plano Mensal* — R$ 19,90/mês\n"
+                        f"🏆 *Plano Anual* — R$ 190/ano (economize 20%!)\n\n"
                         f"Envie _\"Quero fazer upgrade\"_ para ver as opções!"
                     ),
                     "current": current_count,

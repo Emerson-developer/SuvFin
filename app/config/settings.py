@@ -51,17 +51,17 @@ class Settings(BaseSettings):
     ABACATEPAY_WEBHOOK_SECRET: str = ""
 
     # Preços dos planos (em centavos)
-    # Mensal
-    PLAN_BASICO_MONTHLY_CENTS: int = 990       # R$ 9,90
-    PLAN_PRO_MONTHLY_CENTS: int = 1990         # R$ 19,90
-    PLAN_PREMIUM_MONTHLY_CENTS: int = 3490     # R$ 34,90
-    # Anual (com 20% de desconto)
-    PLAN_BASICO_ANNUAL_CENTS: int = 9504       # R$ 95,04 (R$ 7,92/mês)
-    PLAN_PRO_ANNUAL_CENTS: int = 19104         # R$ 191,04 (R$ 15,92/mês)
-    PLAN_PREMIUM_ANNUAL_CENTS: int = 33504     # R$ 335,04 (R$ 27,92/mês)
+    PLAN_MONTHLY_CENTS: int = 1990       # R$ 19,90/mês
+    PLAN_ANNUAL_CENTS: int = 19000       # R$ 190,00/ano
 
-    # Legado (manter para compatibilidade)
-    PREMIUM_PRICE_CENTS: int = 990  # R$ 9,90 em centavos
+    # Legado (manter para compatibilidade — não usar)
+    PLAN_BASICO_MONTHLY_CENTS: int = 1990
+    PLAN_PRO_MONTHLY_CENTS: int = 1990
+    PLAN_PREMIUM_MONTHLY_CENTS: int = 1990
+    PLAN_BASICO_ANNUAL_CENTS: int = 19000
+    PLAN_PRO_ANNUAL_CENTS: int = 19000
+    PLAN_PREMIUM_ANNUAL_CENTS: int = 19000
+    PREMIUM_PRICE_CENTS: int = 1990
 
     # App URLs
     APP_URL: str = "https://suvfin.com"

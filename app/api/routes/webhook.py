@@ -64,22 +64,13 @@ def _detect_plan_selection(text: str) -> tuple[str, str] | None:
     # Normalizar acentos comuns
     t = t.replace("á", "a").replace("é", "e").replace("í", "i")
 
-    plan = None
-    if re.search(r"\bbasico\b", t):
-        plan = "BASICO"
-    elif re.search(r"\bpremium\b", t):
-        plan = "PREMIUM"
-    elif re.search(r"\bpro\b", t):
-        plan = "PRO"
-
-    if not plan:
-        return None
-
-    period = "MONTHLY"
+    # Detectar período (agora só temos Mensal e Anual)
     if re.search(r"\banual\b|\banuais\b|\bano\b|\bannual\b", t):
-        period = "ANNUAL"
+        return ("PRO", "ANNUAL")
+    elif re.search(r"\bmensal\b|\bmes\b|\bpro\b|\bassinar\b|\bquero\b", t):
+        return ("PRO", "MONTHLY")
 
-    return (plan, period)
+    return None
 
 
 def _is_plan_inquiry(text: str) -> bool:
@@ -129,48 +120,23 @@ async def _send_plan_list(phone: str, client: WhatsAppClient) -> None:
             body_text=(
                 "⏰ Seu período de teste expirou!\n\n"
                 "Para continuar usando o SuvFin, escolha um plano abaixo.\n\n"
-                "💡 Planos anuais têm 20% de desconto!"
+                "💡 O plano anual tem 20% de desconto!"
             ),
             footer_text="SuvFin — Seu financeiro no WhatsApp",
             button_text="Ver Planos",
             sections=[
                 {
-                    "title": "Planos Mensais",
+                    "title": "Planos Disponíveis",
                     "rows": [
-                        {
-                            "id": "plan_basico_monthly",
-                            "title": "Básico Mensal",
-                            "description": "R$ 9,90/mês • 100 transações",
-                        },
                         {
                             "id": "plan_pro_monthly",
-                            "title": "Pro Mensal",
-                            "description": "R$ 19,90/mês • Ilimitado",
-                        },
-                        {
-                            "id": "plan_premium_monthly",
-                            "title": "Premium Mensal",
-                            "description": "R$ 34,90/mês • Tudo incluso",
-                        },
-                    ],
-                },
-                {
-                    "title": "Planos Anuais (-20%)",
-                    "rows": [
-                        {
-                            "id": "plan_basico_annual",
-                            "title": "Básico Anual",
-                            "description": "R$ 7,92/mês • Economia de 20%",
+                            "title": "🟢 Plano Mensal",
+                            "description": "R$ 19,90/mês • Registros ilimitados",
                         },
                         {
                             "id": "plan_pro_annual",
-                            "title": "Pro Anual",
-                            "description": "R$ 15,92/mês • Economia de 20%",
-                        },
-                        {
-                            "id": "plan_premium_annual",
-                            "title": "Premium Anual",
-                            "description": "R$ 27,92/mês • Economia de 20%",
+                            "title": "🏆 Plano Anual",
+                            "description": "R$ 190/ano • Economize 20%",
                         },
                     ],
                 },
@@ -185,11 +151,9 @@ async def _send_plan_list(phone: str, client: WhatsAppClient) -> None:
             (
                 "⏰ *Seu período de teste expirou!*\n\n"
                 "Escolha um plano para continuar:\n\n"
-                "⭐ *Básico* — R$ 9,90/mês\n"
-                "⚡ *Pro* — R$ 19,90/mês _(mais popular!)_\n"
-                "👑 *Premium* — R$ 34,90/mês\n\n"
-                "💡 Planos anuais com 20% de desconto!\n\n"
-                'Envie: _"Quero o Pro"_ ou _"Quero o Básico anual"_'
+                "🟢 *Plano Mensal* — R$ 19,90/mês\n"
+                "🏆 *Plano Anual* — R$ 190/ano _(economize 20%!)_\n\n"
+                'Envie: _"Quero o Mensal"_ ou _"Quero o Anual"_'
             ),
         )
 
@@ -211,49 +175,24 @@ async def _send_plan_list_active_user(phone: str, user, client: WhatsAppClient) 
             header_text="Nossos Planos",
             body_text=(
                 f"Seu plano atual: *{current_label}*\n\n"
-                "Confira os planos disponíveis para upgrade:\n\n"
-                "💡 Planos anuais têm 20% de desconto!"
+                "Confira os planos disponíveis:\n\n"
+                "💡 O plano anual tem 20% de desconto!"
             ),
             footer_text="SuvFin — Seu financeiro no WhatsApp",
             button_text="Ver Planos",
             sections=[
                 {
-                    "title": "Planos Mensais",
+                    "title": "Planos Disponíveis",
                     "rows": [
-                        {
-                            "id": "plan_basico_monthly",
-                            "title": "Básico Mensal",
-                            "description": "R$ 9,90/mês • 100 transações",
-                        },
                         {
                             "id": "plan_pro_monthly",
-                            "title": "Pro Mensal",
-                            "description": "R$ 19,90/mês • Ilimitado",
-                        },
-                        {
-                            "id": "plan_premium_monthly",
-                            "title": "Premium Mensal",
-                            "description": "R$ 34,90/mês • Tudo incluso",
-                        },
-                    ],
-                },
-                {
-                    "title": "Planos Anuais (-20%)",
-                    "rows": [
-                        {
-                            "id": "plan_basico_annual",
-                            "title": "Básico Anual",
-                            "description": "R$ 7,92/mês • Economia de 20%",
+                            "title": "🟢 Plano Mensal",
+                            "description": "R$ 19,90/mês • Registros ilimitados",
                         },
                         {
                             "id": "plan_pro_annual",
-                            "title": "Pro Anual",
-                            "description": "R$ 15,92/mês • Economia de 20%",
-                        },
-                        {
-                            "id": "plan_premium_annual",
-                            "title": "Premium Anual",
-                            "description": "R$ 27,92/mês • Economia de 20%",
+                            "title": "🏆 Plano Anual",
+                            "description": "R$ 190/ano • Economize 20%",
                         },
                     ],
                 },
@@ -267,11 +206,9 @@ async def _send_plan_list_active_user(phone: str, user, client: WhatsAppClient) 
             phone,
             (
                 f"📋 *Planos SuvFin* (seu plano atual: {current_label})\n\n"
-                "⭐ *Básico* — R$ 9,90/mês (100 transações)\n"
-                "⚡ *Pro* — R$ 19,90/mês _(mais popular! Ilimitado)_\n"
-                "👑 *Premium* — R$ 34,90/mês _(Tudo incluso + IA)_\n\n"
-                "💡 Planos anuais com 20% de desconto!\n\n"
-                'Envie: _"Quero o Pro"_ ou _"Quero o Básico anual"_'
+                "🟢 *Plano Mensal* — R$ 19,90/mês (registros ilimitados)\n"
+                "🏆 *Plano Anual* — R$ 190/ano _(economize 20%!)_\n\n"
+                'Envie: _"Quero o Mensal"_ ou _"Quero o Anual"_'
             ),
         )
 
@@ -295,53 +232,38 @@ async def _handle_plan_selection(phone: str, plan_id: str, client: WhatsAppClien
         await client.send_text(phone, "❌ Opção inválida. Tente novamente.")
         return
 
-    plan_names = {"BASICO": "⭐ Básico", "PRO": "⚡ Pro", "PREMIUM": "👑 Premium"}
     period_label = "Mensal" if period == "MONTHLY" else "Anual"
-    prices = {
-        ("BASICO", "MONTHLY"): "R$ 9,90/mês",
-        ("BASICO", "ANNUAL"): "R$ 7,92/mês (cobrado R$ 95,04/ano)",
-        ("PRO", "MONTHLY"): "R$ 19,90/mês",
-        ("PRO", "ANNUAL"): "R$ 15,92/mês (cobrado R$ 191,04/ano)",
-        ("PREMIUM", "MONTHLY"): "R$ 34,90/mês",
-        ("PREMIUM", "ANNUAL"): "R$ 27,92/mês (cobrado R$ 335,04/ano)",
-    }
-    features = {
-        "BASICO": (
-            "✅ Registro de despesas e receitas\n"
-            "✅ Relatórios mensais básicos\n"
-            "✅ Categorias automáticas\n"
-            "✅ Até 100 transações/mês"
-        ),
-        "PRO": (
-            "✅ Tudo do Básico\n"
-            "✅ Transações ilimitadas\n"
-            "✅ Relatórios detalhados\n"
-            "✅ Alertas inteligentes\n"
-            "✅ Metas financeiras\n"
-            "✅ Notas fiscais e exportação"
-        ),
-        "PREMIUM": (
-            "✅ Tudo do Pro\n"
-            "✅ Análise preditiva de gastos\n"
-            "✅ Consultoria financeira por IA\n"
-            "✅ Múltiplas contas e cartões\n"
-            "✅ Suporte prioritário 24/7"
-        ),
-    }
+    plan_label = "🟢 Plano Mensal" if period == "MONTHLY" else "🏆 Plano Anual"
+    price_label = "R$ 19,90/mês" if period == "MONTHLY" else "R$ 190/ano"
+    features_monthly = (
+        "✅ Tudo do período gratuito\n"
+        "✅ Registros ilimitados\n"
+        "✅ Relatórios avançados\n"
+        "✅ Suporte prioritário\n"
+        "✅ Cancele quando quiser"
+    )
+    features_annual = (
+        "✅ Tudo do plano mensal\n"
+        "✅ Economia de R$ 48,80/ano\n"
+        "✅ Suporte VIP\n"
+        "✅ Novos recursos primeiro\n"
+        "✅ 2 meses grátis"
+    )
+    features = features_annual if period == "ANNUAL" else features_monthly
 
     try:
         license_service = LicenseService()
         payment_url = await license_service.get_payment_link(phone, plan=plan, period=period)
 
         plan_msg = (
-            f"✨ *Plano {plan_names[plan]} — {period_label}*\n\n"
-            f"💰 *{prices.get((plan, period), '')}*\n\n"
-            f"{features.get(plan, '')}\n\n"
-            f"🔗 Pague via PIX pelo link:\n{payment_url}\n\n"
+            f"✨ *{plan_label} — {period_label}*\n\n"
+            f"💰 *{price_label}*\n\n"
+            f"{features}\n\n"
+            f"🔗 Assine agora pelo link:\n{payment_url}\n\n"
             f"✅ Após o pagamento, seu plano é ativado automaticamente!"
         )
         await client.send_text(phone, plan_msg)
-        logger.info(f"💳 Link gerado para {phone}: {plan} {period_label}")
+        logger.info(f"💳 Link gerado para {phone}: {period_label}")
     except Exception as e:
         logger.error(f"Erro ao gerar link para plano {plan}: {e}")
         await client.send_text(

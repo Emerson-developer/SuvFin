@@ -30,6 +30,7 @@ class BillingFrequency(str, PyEnum):
 
 
 class PlanType(str, PyEnum):
+    """Legado: mantido para compatibilidade. Agora só há Mensal/Anual."""
     BASICO = "BASICO"
     PRO = "PRO"
     PREMIUM = "PREMIUM"
@@ -47,7 +48,7 @@ class BillingPeriod(str, PyEnum):
 class CreateBillingRequest(BaseModel):
     """Request para gerar link de pagamento."""
     phone: str = Field(..., description="Número do WhatsApp do usuário")
-    plan: str = Field("PRO", description="Plano: BASICO, PRO ou PREMIUM")
+    plan: str = Field("PRO", description="Legado — ignorado. Usar period.")
     period: str = Field("MONTHLY", description="Período: MONTHLY ou ANNUAL")
     email: Optional[str] = Field(None, description="E-mail do cliente (opcional)")
     name: Optional[str] = Field(None, description="Nome do cliente (opcional)")
