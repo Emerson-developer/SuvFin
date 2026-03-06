@@ -9,10 +9,43 @@ PATCH /api/v1/admin/conversations/{conv_id}
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.middleware.auth import get_current_admin
-from app.schemas.conversation_schema import ConversationUpdate
+from app.schemas.conversation_schema import ConversationUpdate, ConversationCreate
 from app.services.admin.conversation_service import ConversationService
 
 router = APIRouter(prefix="/conversations", tags=["admin-conversations"])
+
+
+@router.post("", status_code=201)
+async def create_conversation(
+    body: ConversationCreate,
+    _admin: dict = Depends(get_current_admin),
+):
+    """
+    Inicia uma conversa para um contato existente que ainda não tem conversação.
+    Retorna 409 se o contato já possui uma conversa.
+    """
+    service = ConversationService()
+
+    # Check if contact already has a conversation
+    existing = await service.get_by_contact(body.contact_id)
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail="Contato já possui uma conversa",
+        )
+
+    # Create conversation (get_or_create handles the insert)
+    conv = await service.get_or_create(body.contact_id)
+
+    return {
+        "data": {
+            "id": str(conv.id),
+            "contact_id": str(conv.user_id),
+            "status": conv.status,
+            "last_message_at": conv.last_message_at,
+            "created_at": conv.created_at,
+        }
+    }
 
 
 @router.get("")

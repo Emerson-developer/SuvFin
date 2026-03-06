@@ -55,3 +55,7 @@ class ConversationDetail(BaseModel):
 
 class ConversationUpdate(BaseModel):
     status: str  # 'open' or 'closed'
+
+
+class ConversationCreate(BaseModel):
+    contact_id: str

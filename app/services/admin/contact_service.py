@@ -3,6 +3,7 @@ Serviço de contatos (users) para o painel admin.
 CRUD + listagem com subscription/plan aninhados.
 """
 
+from datetime import datetime, timedelta
 from typing import Optional
 from uuid import UUID
 
@@ -11,9 +12,10 @@ from sqlalchemy.orm import selectinload
 from loguru import logger
 
 from app.config.database import async_session
-from app.models.user import User
+from app.models.user import User, LicenseType
 from app.models.subscription import Subscription
 from app.models.conversation import Conversation
+from app.models.plan import Plan
 
 
 class ContactService:
@@ -186,7 +188,12 @@ class ContactService:
     async def create(self, data: dict) -> dict:
         """Cria um novo contato (user)."""
         async with async_session() as session:
-            from app.models.user import LicenseType
+            # Check phone uniqueness
+            existing = await session.execute(
+                select(User).where(User.phone == data["phone_number"])
+            )
+            if existing.scalar_one_or_none():
+                raise ValueError("CONFLICT:Contato com este telefone já existe")
 
             user = User(
                 phone=data["phone_number"],
@@ -212,6 +219,110 @@ class ContactService:
                 "is_active": user.is_active,
                 "created_at": user.created_at,
                 "updated_at": user.updated_at,
+            }
+
+    async def create_full(self, data: dict) -> dict:
+        """
+        Cria contato + subscription + conversation em uma única transação.
+        Usado quando plan_id é fornecido no POST /contacts.
+        """
+        async with async_session() as session:
+            # 1. Check phone uniqueness
+            existing = await session.execute(
+                select(User).where(User.phone == data["phone_number"])
+            )
+            if existing.scalar_one_or_none():
+                raise ValueError("CONFLICT:Contato com este telefone já existe")
+
+            # 2. Fetch plan
+            plan = await session.get(Plan, UUID(data["plan_id"]))
+            if not plan:
+                raise ValueError("NOT_FOUND:Plano não encontrado")
+
+            # 3. Determine license type from plan
+            license_type = LicenseType.PRO if plan.billing_cycle != "free" else LicenseType.FREE_TRIAL
+
+            # 4. Create user
+            user = User(
+                phone=data["phone_number"],
+                name=data.get("name"),
+                email=data.get("email"),
+                avatar_url=data.get("avatar_url"),
+                notes=data.get("notes", ""),
+                is_active=True,
+                license_type=license_type,
+            )
+            session.add(user)
+            await session.flush()  # get user.id
+
+            # 5. Create subscription with correct expiration
+            now = datetime.utcnow()
+            if plan.billing_cycle == "monthly":
+                expires_at = now + timedelta(days=30)
+            elif plan.billing_cycle == "yearly":
+                expires_at = now + timedelta(days=365)
+            else:
+                expires_at = now + timedelta(days=7)  # free trial = 7 days
+
+            sub_status = "active" if plan.billing_cycle != "free" else "trial"
+
+            sub = Subscription(
+                user_id=user.id,
+                plan_id=plan.id,
+                status=sub_status,
+                started_at=now,
+                expires_at=expires_at,
+            )
+            session.add(sub)
+
+            # 6. Set license_expires_at on user (keeps bot working)
+            user.license_expires_at = expires_at.date() if expires_at else None
+
+            # 7. Create conversation (open, ready for admin to send messages)
+            conv = Conversation(
+                user_id=user.id,
+                status="open",
+            )
+            session.add(conv)
+
+            await session.commit()
+            await session.refresh(user)
+            await session.refresh(sub)
+            await session.refresh(conv)
+
+            logger.info(
+                f"Contact completo criado via admin: {user.phone} | "
+                f"Plan: {plan.name} | Sub: {sub.id} | Conv: {conv.id}"
+            )
+
+            return {
+                "contact": {
+                    "id": str(user.id),
+                    "name": user.name,
+                    "phone": user.phone,
+                    "email": user.email,
+                    "avatar_url": user.avatar_url,
+                    "notes": user.notes,
+                    "is_active": user.is_active,
+                    "created_at": user.created_at,
+                    "updated_at": user.updated_at,
+                },
+                "subscription": {
+                    "id": str(sub.id),
+                    "plan_id": str(sub.plan_id),
+                    "plan_name": plan.name,
+                    "status": sub.status,
+                    "started_at": sub.started_at,
+                    "expires_at": sub.expires_at,
+                    "created_at": sub.created_at,
+                },
+                "conversation": {
+                    "id": str(conv.id),
+                    "contact_id": str(conv.user_id),
+                    "status": conv.status,
+                    "last_message_at": conv.last_message_at,
+                    "created_at": conv.created_at,
+                },
             }
 
     async def update(self, user_id: str, data: dict) -> Optional[dict]:

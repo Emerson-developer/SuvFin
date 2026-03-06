@@ -61,13 +61,31 @@ async def create_contact(
     body: ContactCreate,
     _admin: dict = Depends(get_current_admin),
 ):
-    """Cria um novo contato."""
+    """
+    Cria um novo contato.
+    Se plan_id for fornecido, cria também subscription + conversation em uma transação.
+    """
     if not body.phone_number:
         raise HTTPException(status_code=422, detail="phone_number is required")
 
     service = ContactService()
-    contact = await service.create(body.model_dump())
-    return {"data": contact}
+
+    try:
+        # If plan_id provided → create contact + subscription + conversation
+        if body.plan_id:
+            result = await service.create_full(body.model_dump())
+            return {"data": result}
+
+        # Otherwise → just create the contact
+        contact = await service.create(body.model_dump())
+        return {"data": contact}
+    except ValueError as e:
+        msg = str(e)
+        if msg.startswith("CONFLICT:"):
+            raise HTTPException(status_code=409, detail=msg.split(":", 1)[1])
+        if msg.startswith("NOT_FOUND:"):
+            raise HTTPException(status_code=404, detail=msg.split(":", 1)[1])
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.patch("/{contact_id}")

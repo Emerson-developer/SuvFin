@@ -98,6 +98,7 @@ class ContactCreate(BaseModel):
     notes: Optional[str] = ""
     avatar_url: Optional[str] = None
     is_active: bool = True
+    plan_id: Optional[str] = None  # If provided, auto-creates subscription + conversation
 
 
 class ContactUpdate(BaseModel):
