@@ -5,15 +5,12 @@ Auth middleware: dependency FastAPI para proteger rotas admin com JWT.
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from app.config.settings import settings
-
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Bearer token scheme
 security = HTTPBearer()
@@ -21,12 +18,18 @@ security = HTTPBearer()
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verifica senha contra o hash bcrypt."""
-    return pwd_context.verify(plain_password, hashed_password)
+    return bcrypt.checkpw(
+        plain_password.encode("utf-8"),
+        hashed_password.encode("utf-8"),
+    )
 
 
 def hash_password(password: str) -> str:
     """Gera hash bcrypt da senha."""
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(
+        password.encode("utf-8"),
+        bcrypt.gensalt(),
+    ).decode("utf-8")
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
