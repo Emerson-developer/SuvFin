@@ -2,6 +2,7 @@
 Rotas do Webhook do WhatsApp (Meta Cloud API).
 """
 
+import asyncio
 import re
 
 from fastapi import APIRouter, Request, Response, Query, HTTPException, BackgroundTasks
@@ -12,6 +13,7 @@ from app.services.whatsapp.parser import WhatsAppParser
 from app.services.whatsapp.client import WhatsAppClient
 from app.services.license.license_service import LicenseService
 from app.services.mcp.processor import MCPProcessor
+from app.services.admin.message_service import MessageService
 
 router = APIRouter(tags=["webhook"])
 
@@ -364,6 +366,18 @@ async def _process_webhook(payload: dict):
             await _send_plan_list_active_user(phone, user, client)
             return
 
+    # ── Dual-write: persistir mensagem do usuário no PostgreSQL ──
+    user_content_str = content if isinstance(content, str) else str(content)
+    msg_service = MessageService()
+    asyncio.create_task(
+        msg_service.persist_bot_message(
+            user_id=str(user.id),
+            content=user_content_str,
+            sender_type="user",
+            message_type=msg_type if msg_type in ("text", "image", "audio", "document") else "text",
+        )
+    )
+
     # Processar com MCP + LLM
     processor = MCPProcessor()
     response = await processor.process(
@@ -376,6 +390,16 @@ async def _process_webhook(payload: dict):
 
     # Enviar resposta
     await client.send_text(phone, response.text)
+
+    # ── Dual-write: persistir resposta do bot no PostgreSQL ──
+    asyncio.create_task(
+        msg_service.persist_bot_message(
+            user_id=str(user.id),
+            content=response.text,
+            sender_type="admin",
+            message_type="text",
+        )
+    )
 
     # Se tiver mídia (gráfico, PDF), enviar
     if response.media and response.media_type:

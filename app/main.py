@@ -20,9 +20,17 @@ from app.api.routes.health import router as health_router
 from app.api.routes.payment import router as payment_router
 from app.api.routes.payment import webhook_router as abacatepay_webhook_router
 from app.api.routes.tokens import router as tokens_router
+from app.api.routes.admin.auth import router as admin_auth_router
+from app.api.routes.admin.plans import router as admin_plans_router
+from app.api.routes.admin.contacts import router as admin_contacts_router
+from app.api.routes.admin.subscriptions import router as admin_subscriptions_router
+from app.api.routes.admin.conversations import router as admin_conversations_router
+from app.api.routes.admin.messages import router as admin_messages_router
+from app.api.routes.admin.dashboard import router as admin_dashboard_router
 from app.api.middleware.signature import WebhookSignatureMiddleware
 from app.api.middleware.rate_limit import RateLimitMiddleware
 from app.services.finance.category_service import CategoryService
+from app.services.admin.auth_service import AuthService
 
 
 # --- Sentry (monitoramento de erros) ---
@@ -48,6 +56,13 @@ async def lifespan(app: FastAPI):
     category_service = CategoryService()
     await category_service.seed_defaults()
     logger.info("📂 Categorias padrão carregadas")
+
+    # Seed admin padrão (se não existir)
+    auth_service = AuthService()
+    existing_admin = await auth_service.get_admin_by_username("admin")
+    if not existing_admin:
+        await auth_service.create_admin("admin", "admin123")
+        logger.info("🔑 Admin padrão criado (admin/admin123) — TROQUE A SENHA!")
 
     logger.info(f"✅ SuvFin rodando em {settings.APP_ENV} na porta {settings.APP_PORT}")
 
@@ -86,6 +101,16 @@ app.include_router(webhook_router)
 app.include_router(payment_router)
 app.include_router(abacatepay_webhook_router)
 app.include_router(tokens_router)
+
+# --- Rotas Admin (painel) ---
+admin_prefix = "/api/v1/admin"
+app.include_router(admin_auth_router, prefix=admin_prefix)
+app.include_router(admin_plans_router, prefix=admin_prefix)
+app.include_router(admin_contacts_router, prefix=admin_prefix)
+app.include_router(admin_subscriptions_router, prefix=admin_prefix)
+app.include_router(admin_conversations_router, prefix=admin_prefix)
+app.include_router(admin_messages_router, prefix=admin_prefix)
+app.include_router(admin_dashboard_router, prefix=admin_prefix)
 
 # --- Páginas estáticas ---
 static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")

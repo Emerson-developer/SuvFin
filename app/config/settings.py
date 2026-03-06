@@ -73,6 +73,11 @@ class Settings(BaseSettings):
     # Celery
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
 
+    # Admin Auth (JWT)
+    ADMIN_JWT_SECRET_KEY: str = "change-me-in-production-use-a-strong-secret"
+    ADMIN_JWT_ALGORITHM: str = "HS256"
+    ADMIN_JWT_EXPIRE_MINUTES: int = 480  # 8 horas
+
     @property
     def whatsapp_base_url(self) -> str:
         return f"https://graph.facebook.com/{self.WHATSAPP_API_VERSION}"

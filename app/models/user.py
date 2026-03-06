@@ -3,7 +3,7 @@ from datetime import datetime, date
 from enum import Enum as PyEnum
 
 from sqlalchemy import (
-    Column, String, DateTime, Boolean, Enum, Date
+    Column, String, DateTime, Boolean, Enum, Date, Text
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -30,11 +30,23 @@ class User(Base):
     license_expires_at = Column(Date, nullable=True)
     is_active = Column(Boolean, default=True)
     abacatepay_customer_id = Column(String(100), nullable=True)
+
+    # Admin panel columns (contacts)
+    email = Column(Text, nullable=True)
+    avatar_url = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True, default="")
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     transactions = relationship("Transaction", back_populates="user", lazy="selectin")
+    subscription = relationship(
+        "Subscription", back_populates="user", uselist=False, lazy="selectin"
+    )
+    conversation = relationship(
+        "Conversation", back_populates="user", uselist=False, lazy="selectin"
+    )
 
     @property
     def is_license_valid(self) -> bool:

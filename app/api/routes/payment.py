@@ -25,6 +25,7 @@ from app.schemas.payment import (
 from app.services.payment.abacatepay_service import AbacatePayService, AbacatePayError
 from app.services.license.license_service import LicenseService
 from app.services.whatsapp.client import WhatsAppClient
+from app.services.admin.subscription_service import SubscriptionService
 
 router = APIRouter(prefix="/payment", tags=["payment"])
 
@@ -273,6 +274,17 @@ async def abacatepay_webhook(
 
             if success:
                 logger.info(f"🎉 Upgrade {plan_display} confirmado via pagamento {billing_id}")
+
+                # Sincronizar subscription na nova tabela de subscriptions
+                try:
+                    sub_service = SubscriptionService()
+                    await sub_service.sync_from_payment(
+                        user_id=str(payment.user_id),
+                        plan_type=plan_type,
+                        billing_period=billing_period,
+                    )
+                except Exception as e:
+                    logger.error(f"Erro ao sincronizar subscription: {e}")
 
                 # 6. Notificar usuário via WhatsApp
                 user_stmt = select(User).where(User.id == payment.user_id)
