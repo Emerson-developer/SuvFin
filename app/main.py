@@ -15,6 +15,7 @@ from loguru import logger
 from app.config.settings import settings
 from app.config.database import init_db
 from app.config.redis_client import close_redis
+from app.services.whatsapp.client import WhatsAppClient
 from app.api.routes.webhook import router as webhook_router
 from app.api.routes.health import router as health_router
 from app.api.routes.payment import router as payment_router
@@ -70,6 +71,7 @@ async def lifespan(app: FastAPI):
 
     # SHUTDOWN
     logger.info("🛑 Encerrando SuvFin...")
+    await WhatsAppClient.close_http_client()
     await close_redis()
     logger.info("✅ Conexões encerradas")
 
