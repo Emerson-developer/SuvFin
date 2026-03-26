@@ -28,6 +28,9 @@ from app.api.routes.admin.subscriptions import router as admin_subscriptions_rou
 from app.api.routes.admin.conversations import router as admin_conversations_router
 from app.api.routes.admin.messages import router as admin_messages_router
 from app.api.routes.admin.dashboard import router as admin_dashboard_router
+from app.api.routes.admin.connections import router as admin_connections_router_pluggy
+from app.api.routes.pluggy import router as pluggy_router
+from app.api.routes.pluggy_webhook import router as pluggy_webhook_router
 from app.api.middleware.signature import WebhookSignatureMiddleware
 from app.api.middleware.rate_limit import RateLimitMiddleware
 from app.services.finance.category_service import CategoryService
@@ -113,6 +116,11 @@ app.include_router(admin_subscriptions_router, prefix=admin_prefix)
 app.include_router(admin_conversations_router, prefix=admin_prefix)
 app.include_router(admin_messages_router, prefix=admin_prefix)
 app.include_router(admin_dashboard_router, prefix=admin_prefix)
+app.include_router(admin_connections_router_pluggy, prefix=admin_prefix)
+
+# --- Rotas Pluggy Open Finance ---
+app.include_router(pluggy_router)
+app.include_router(pluggy_webhook_router)
 
 # --- Páginas estáticas ---
 static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")

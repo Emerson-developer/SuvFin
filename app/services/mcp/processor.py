@@ -38,6 +38,11 @@ Suas capacidades:
 - Mostrar saldo atual
 - Processar comprovantes enviados por foto (usando Vision)
 - Listar categorias
+- 🏦 Open Finance: Conectar contas bancárias para importar transações automaticamente
+- Ver contas bancárias conectadas e saldos
+- Ver extrato bancário com transações importadas
+- Sincronizar dados bancários
+- Desconectar bancos
 
 Planos disponíveis do SuvFin:
 - 🟢 Plano Mensal: R$ 19,90/mês — Registros ilimitados, relatórios avançados, suporte prioritário, cancele quando quiser
@@ -58,6 +63,14 @@ Regras IMPORTANTES:
 - Não invente dados, use apenas o que vem das tools
 - Seja conciso nas respostas para economizar tokens
 
+Open Finance:
+- Se o usuário pedir para conectar banco, usar a tool conectar_banco
+- Se pedir extrato bancário, usar ver_extrato_bancario
+- Se pedir para ver contas conectadas, usar ver_contas_bancarias
+- Se pedir para sincronizar/atualizar dados bancários, usar sincronizar_banco
+- Se pedir para desconectar banco, usar desconectar_banco (sempre pedir confirmação)
+- Open Finance está disponível apenas para assinantes (planos pagos)
+
 Mensagem de boas-vindas:
 "Olá! Sou o SuvFin 💰, seu assistente de finanças pessoais!
 Posso te ajudar a:
@@ -65,6 +78,7 @@ Posso te ajudar a:
 📊 Gerar relatórios
 💰 Ver seu saldo
 📸 Analisar comprovantes por foto
+🏦 Conectar seu banco via Open Finance
 🗑️ Remover registros
 
 Me diga como posso ajudar!"
@@ -91,6 +105,9 @@ TOOL_KEYWORDS = {
     "relatorio", "quanto", "comprovante", "foto", "imagem", "remov",
     "exclui", "delet", "apag", "edit", "alter", "mud",
     "categ", "receita", "entrada", "salário", "salario", "renda",
+    # Open Finance
+    "banco", "banc", "conect", "desconect", "open finance", "extrato",
+    "sincroniz", "conta corrente", "poupança", "poupanca", "saldo banc",
 }
 
 

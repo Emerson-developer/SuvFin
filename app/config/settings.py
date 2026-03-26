@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     ABACATEPAY_API_KEY: str = ""
     ABACATEPAY_WEBHOOK_SECRET: str = ""
 
+    # Pluggy Open Finance
+    PLUGGY_CLIENT_ID: str = ""
+    PLUGGY_CLIENT_SECRET: str = ""
+    PLUGGY_WEBHOOK_URL: str = ""  # URL pública: https://seudominio.com/api/v1/pluggy/webhook
+    PLUGGY_BASE_URL: str = "https://api.pluggy.ai"
+
     # Preços dos planos (em centavos)
     PLAN_MONTHLY_CENTS: int = 1990       # R$ 19,90/mês
     PLAN_ANNUAL_CENTS: int = 19000       # R$ 190,00/ano

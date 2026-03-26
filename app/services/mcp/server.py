@@ -12,6 +12,11 @@ from app.services.mcp.tools.saldo_atual import saldo_atual
 from app.services.mcp.tools.ultimos_lancamentos import ultimos_lancamentos
 from app.services.mcp.tools.listar_categorias import listar_categorias
 from app.services.mcp.tools.processar_comprovante import processar_comprovante
+from app.services.mcp.tools.conectar_banco import conectar_banco
+from app.services.mcp.tools.ver_contas_bancarias import ver_contas_bancarias
+from app.services.mcp.tools.ver_extrato_bancario import ver_extrato_bancario
+from app.services.mcp.tools.sincronizar_banco import sincronizar_banco
+from app.services.mcp.tools.desconectar_banco import desconectar_banco
 
 
 # Definição das tools para o Anthropic API (tool_use)
@@ -190,6 +195,103 @@ TOOL_DEFINITIONS = [
             "required": ["user_id", "media_id"],
         },
     },
+    # --- Open Finance (Pluggy) tools ---
+    {
+        "name": "conectar_banco",
+        "description": (
+            "Conecta uma conta bancária do usuário via Open Finance (Pluggy). "
+            "Gera um link para o usuário conectar seu banco. "
+            "Disponível apenas para assinantes (plano pago)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "user_id": {"type": "string"},
+            },
+            "required": ["user_id"],
+        },
+    },
+    {
+        "name": "ver_contas_bancarias",
+        "description": (
+            "Lista as contas bancárias conectadas do usuário via Open Finance. "
+            "Mostra banco, tipo de conta, saldo e última sincronização."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "user_id": {"type": "string"},
+            },
+            "required": ["user_id"],
+        },
+    },
+    {
+        "name": "ver_extrato_bancario",
+        "description": (
+            "Mostra o extrato bancário com transações importadas via Open Finance. "
+            "Pode filtrar por banco, período e quantidade."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "user_id": {"type": "string"},
+                "banco": {
+                    "type": "string",
+                    "description": "Nome do banco para filtrar (ex: Nubank, Itaú)",
+                },
+                "periodo": {
+                    "type": "string",
+                    "description": "Período: hoje, semana, mês, últimos 30 dias",
+                },
+                "quantidade": {
+                    "type": "integer",
+                    "description": "Número de transações a exibir (default 10)",
+                    "default": 10,
+                },
+            },
+            "required": ["user_id"],
+        },
+    },
+    {
+        "name": "sincronizar_banco",
+        "description": (
+            "Força a sincronização/atualização dos dados bancários do usuário. "
+            "Pode sincronizar todos os bancos ou um específico."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "user_id": {"type": "string"},
+                "banco": {
+                    "type": "string",
+                    "description": "Nome do banco para sincronizar (opcional, sincroniza todos se omitido)",
+                },
+            },
+            "required": ["user_id"],
+        },
+    },
+    {
+        "name": "desconectar_banco",
+        "description": (
+            "Desconecta uma conta bancária do Open Finance. "
+            "Remove a conexão e as transações importadas daquele banco."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "user_id": {"type": "string"},
+                "banco": {
+                    "type": "string",
+                    "description": "Nome do banco a desconectar",
+                },
+                "confirmar": {
+                    "type": "boolean",
+                    "description": "Se True, confirma a desconexão",
+                },
+            },
+            "required": ["user_id"],
+        },
+    },
 ]
 
 
@@ -205,4 +307,9 @@ TOOL_HANDLERS = {
     "ultimos_lancamentos": ultimos_lancamentos,
     "listar_categorias": listar_categorias,
     "processar_comprovante": processar_comprovante,
+    "conectar_banco": conectar_banco,
+    "ver_contas_bancarias": ver_contas_bancarias,
+    "ver_extrato_bancario": ver_extrato_bancario,
+    "sincronizar_banco": sincronizar_banco,
+    "desconectar_banco": desconectar_banco,
 }
