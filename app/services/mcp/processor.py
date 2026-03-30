@@ -12,6 +12,7 @@ from datetime import date
 from typing import Optional
 
 import anthropic
+from openai import AsyncOpenAI
 from loguru import logger
 
 from app.config.settings import settings
@@ -37,6 +38,7 @@ Suas capacidades:
 - Gerar relatórios por período e categoria
 - Mostrar saldo atual
 - Processar comprovantes enviados por foto (usando Vision)
+- 🎙️ Transcrever e processar mensagens de voz
 - Listar categorias
 - 🏦 Open Finance: Conectar contas bancárias para importar transações automaticamente
 - Ver contas bancárias conectadas e saldos
@@ -178,8 +180,54 @@ class MCPProcessor:
         if message_type == "image":
             return await self._process_image(user_id, phone, content, conversation)
 
+        # Se for áudio, transcrever e processar como texto
+        if message_type == "audio":
+            return await self._process_audio(user_id, phone, content, conversation, name)
+
         # Texto → LLM + Tools
         return await self._process_text(user_id, phone, content, conversation, name)
+
+    async def _transcribe_audio(self, media_id: str) -> str:
+        """Baixa áudio do WhatsApp e transcreve via OpenAI Whisper."""
+        media_service = WhatsAppMedia()
+
+        try:
+            audio_bytes = await media_service.download(media_id)
+        except Exception as e:
+            logger.error(f"Erro ao baixar áudio: {e}")
+            raise
+
+        openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        transcript = await openai_client.audio.transcriptions.create(
+            model="whisper-1",
+            file=("audio.ogg", audio_bytes, "audio/ogg"),
+            language="pt",
+        )
+        return transcript.text
+
+    async def _process_audio(
+        self,
+        user_id: str,
+        phone: str,
+        media_id: str,
+        conversation: list[dict],
+        name: str,
+    ) -> MCPResponse:
+        """Transcreve áudio e processa o texto resultante."""
+        try:
+            transcript = await self._transcribe_audio(media_id)
+            logger.info(f"🎙️ Áudio transcrito ({phone}): {transcript[:80]}")
+        except Exception as e:
+            logger.error(f"Erro na transcrição de áudio: {e}")
+            return MCPResponse(
+                text="❌ Não consegui transcrever o áudio. Tente enviar uma mensagem de texto.",
+                tokens_used={"input": 0, "output": 0},
+            )
+
+        # Processar o texto transcrito normalmente
+        response = await self._process_text(user_id, phone, transcript, conversation, name)
+
+        return response
 
     async def _process_image(
         self,

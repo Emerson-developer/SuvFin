@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
     ANTHROPIC_MODEL_LIGHT: str = "claude-3-5-haiku-latest"
 
+    # OpenAI (Whisper — transcrição de áudio)
+    OPENAI_API_KEY: str = ""
+
     # Otimização de custos LLM
     LLM_MAX_CONVERSATION_MESSAGES: int = 6  # Histórico de chat (não afeta dados financeiros)
     LLM_CONVERSATION_TTL: int = 3600  # TTL conversa em segundos (1 hora)
