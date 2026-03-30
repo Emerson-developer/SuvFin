@@ -3,7 +3,7 @@ from datetime import datetime, date
 from enum import Enum as PyEnum
 
 from sqlalchemy import (
-    Column, String, Numeric, Date, DateTime, ForeignKey, Enum, Text
+    Column, String, Numeric, Date, DateTime, ForeignKey, Enum, Text, Index
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -14,6 +14,11 @@ from app.config.database import Base
 class TransactionType(PyEnum):
     INCOME = "INCOME"
     EXPENSE = "EXPENSE"
+
+
+class TransactionProfile(PyEnum):
+    PF = "PF"
+    PJ = "PJ"
 
 
 class Transaction(Base):
@@ -31,6 +36,12 @@ class Transaction(Base):
         UUID(as_uuid=True), ForeignKey("categories.id"), nullable=True
     )
     receipt_url = Column(Text, nullable=True)
+    profile = Column(
+        Enum(TransactionProfile),
+        nullable=False,
+        default=TransactionProfile.PF,
+        server_default="PF",
+    )
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     deleted_at = Column(DateTime, nullable=True)  # Soft delete

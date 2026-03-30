@@ -27,6 +27,7 @@ class PluggyAccount(Base):
     number = Column(String(50), nullable=True)
     balance = Column(Numeric(12, 2), nullable=True)
     currency_code = Column(String(10), default="BRL")
+    profile = Column(String(2), nullable=False, default="PF", server_default="PF")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

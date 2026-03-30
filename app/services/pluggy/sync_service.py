@@ -277,6 +277,7 @@ class PluggySyncService:
                         "updated_at": datetime.utcnow(),
                     },
                 )
+
                 await session.execute(stmt)
 
             await session.commit()
@@ -322,6 +323,7 @@ class PluggySyncService:
                     category_id=suvfin_category_id,
                     payment_method=payment_method,
                     currency_code=tx.get("currencyCode", "BRL"),
+                    profile=account.profile,
                 ).on_conflict_do_update(
                     index_elements=["pluggy_transaction_id"],
                     set_={
@@ -561,3 +563,71 @@ class PluggySyncService:
                 )
             )
             return result.scalar_one_or_none()
+
+    # ------------------------------------------------------------------
+    # Perfil PF/PJ por conta bancária
+    # ------------------------------------------------------------------
+
+    async def set_account_profile(
+        self, user_id: str, pluggy_account_id: str, profile: str
+    ) -> bool:
+        """Define o perfil (PF/PJ) de uma conta bancária e re-aplica às suas transações."""
+        if profile not in ("PF", "PJ"):
+            return False
+
+        async with async_session() as session:
+            result = await session.execute(
+                select(PluggyAccount).where(
+                    PluggyAccount.pluggy_account_id == pluggy_account_id,
+                    PluggyAccount.user_id == user_id,
+                )
+            )
+            account = result.scalar_one_or_none()
+            if not account:
+                return False
+
+            account.profile = profile
+
+            # Propagar para as transações dessa conta
+            tx_result = await session.execute(
+                select(PluggyTransaction).where(
+                    PluggyTransaction.pluggy_account_id == account.id
+                )
+            )
+            for tx in tx_result.scalars().all():
+                tx.profile = profile
+
+            await session.commit()
+            logger.info(
+                f"🏷️ Conta {pluggy_account_id} definida como {profile} "
+                f"(e suas transações atualizadas)"
+            )
+            return True
+
+    async def get_user_transactions_by_profile(
+        self,
+        user_id: str,
+        profile: str,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        limit: int = 20,
+    ) -> list[PluggyTransaction]:
+        """Lista transações importadas filtradas por perfil PF/PJ."""
+        async with async_session() as session:
+            query = (
+                select(PluggyTransaction)
+                .where(
+                    PluggyTransaction.user_id == user_id,
+                    PluggyTransaction.profile == profile,
+                )
+                .order_by(PluggyTransaction.date.desc(), PluggyTransaction.created_at.desc())
+            )
+
+            if date_from:
+                query = query.where(PluggyTransaction.date >= date_from)
+            if date_to:
+                query = query.where(PluggyTransaction.date <= date_to)
+
+            query = query.limit(limit)
+            result = await session.execute(query)
+            return result.scalars().all()

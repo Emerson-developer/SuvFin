@@ -9,10 +9,16 @@ async def relatorio_periodo(
     periodo: str = None,
     data_inicio: str = None,
     data_fim: str = None,
+    perfil: str = None,
 ) -> str:
     """Gera relatório financeiro por período."""
     service = ReportService()
     today = date.today()
+
+    if perfil and perfil.upper() not in ("PF", "PJ"):
+        return "❌ Perfil inválido. Use 'PF' ou 'PJ'."
+
+    profile_filter = perfil.upper() if perfil else None
 
     # Determinar datas com base no período
     if data_inicio and data_fim:
@@ -28,20 +34,23 @@ async def relatorio_periodo(
         start = today.replace(day=1)
         end = today
 
-    report = await service.generate_period_report(user_id, start, end)
+    report = await service.generate_period_report(
+        user_id, start, end, profile=profile_filter
+    )
 
     if report["transaction_count"] == 0:
         return f"📊 Nenhum lançamento encontrado de {start.strftime('%d/%m')} a {end.strftime('%d/%m/%Y')}."
 
+    perfil_label = f" [{profile_filter}]" if profile_filter else ""
     lines = [
-        f"📊 *Relatório: {start.strftime('%d/%m')} a {end.strftime('%d/%m/%Y')}*\n",
+        f"📊 *Relatório{perfil_label}: {start.strftime('%d/%m')} a {end.strftime('%d/%m/%Y')}*\n",
         f"🟢 Entradas: R$ {report['total_income']:,.2f}",
         f"🔴 Saídas: R$ {report['total_expense']:,.2f}",
         f"💰 Saldo: R$ {report['balance']:,.2f}\n",
         f"📋 Total de lançamentos: {report['transaction_count']}\n",
     ]
 
-    if report["by_category"]:
+    if report.get("by_category"):
         lines.append("📂 *Por categoria:*")
         for cat in report["by_category"][:10]:
             emoji = cat.get("emoji", "📦")
@@ -49,6 +58,21 @@ async def relatorio_periodo(
                 f"  {emoji} {cat['name']}: R$ {cat['total']:,.2f} "
                 f"({cat['count']}x)"
             )
+
+    # Breakdown PF vs PJ (só quando sem filtro)
+    if not profile_filter and report.get("by_profile"):
+        bp = report["by_profile"]
+        lines.append("")
+        lines.append("📊 *Por Perfil:*")
+        for prof_key, prof_label in (("PF", "👤 Pessoal (PF)"), ("PJ", "🏢 Empresa (PJ)")):
+            d = bp.get(prof_key, {})
+            if d.get("total_income", 0) or d.get("total_expense", 0):
+                lines.append(
+                    f"  {prof_label}:\n"
+                    f"    Entradas: R$ {d['total_income']:,.2f} | "
+                    f"Saídas: R$ {d['total_expense']:,.2f} | "
+                    f"Saldo: R$ {d['balance']:,.2f}"
+                )
 
     return "\n".join(lines)
 

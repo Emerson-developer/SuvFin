@@ -11,8 +11,9 @@ from sqlalchemy.orm import selectinload
 from loguru import logger
 
 from app.config.database import async_session
-from app.models.transaction import Transaction, TransactionType
+from app.models.transaction import Transaction, TransactionType, TransactionProfile
 from app.models.category import Category
+from app.models.user import User
 from app.services.finance.category_service import CategoryService
 
 
@@ -31,9 +32,13 @@ class TransactionService:
         category_name: str = None,
         tx_date: date = None,
         receipt_url: str = None,
+        profile: str = None,
     ) -> dict:
         """Cria uma nova transação."""
         async with async_session() as session:
+            # Resolver perfil PF/PJ
+            resolved_profile = await self._resolve_profile(session, user_id, profile)
+
             # Resolver categoria
             category = None
             if category_name:
@@ -49,6 +54,7 @@ class TransactionService:
                 date=tx_date or date.today(),
                 category_id=category.id if category else None,
                 receipt_url=receipt_url,
+                profile=resolved_profile,
             )
 
             session.add(transaction)
@@ -57,7 +63,7 @@ class TransactionService:
 
             logger.info(
                 f"Transação criada: {transaction.id} | "
-                f"{tx_type.value} R${amount} | user={user_id}"
+                f"{tx_type.value} R${amount} | user={user_id} | profile={resolved_profile.value}"
             )
 
             return {
@@ -68,6 +74,7 @@ class TransactionService:
                 "date": transaction.date,
                 "category_name": category.name if category else None,
                 "category_emoji": category.emoji if category else "📦",
+                "profile": resolved_profile.value,
             }
 
     async def get_by_id(self, transaction_id: str, user_id: str) -> Optional[dict]:
@@ -113,6 +120,7 @@ class TransactionService:
         user_id: str,
         limit: int = 5,
         tx_type: str = None,
+        profile: str = None,
     ) -> list[dict]:
         """Retorna últimos N lançamentos."""
         async with async_session() as session:
@@ -130,6 +138,11 @@ class TransactionService:
                     Transaction.type == TransactionType(tx_type)
                 )
 
+            if profile and profile in ("PF", "PJ"):
+                stmt = stmt.where(
+                    Transaction.profile == TransactionProfile(profile)
+                )
+
             stmt = stmt.order_by(desc(Transaction.created_at)).limit(limit)
 
             result = await session.execute(stmt)
@@ -138,7 +151,7 @@ class TransactionService:
             return [self._to_dict(tx) for tx in transactions]
 
     async def search(
-        self, user_id: str, query: str, limit: int = 5
+        self, user_id: str, query: str, limit: int = 5, profile: str = None
     ) -> list[dict]:
         """Busca lançamentos por descrição (case-insensitive)."""
         async with async_session() as session:
@@ -152,9 +165,14 @@ class TransactionService:
                         Transaction.description.ilike(f"%{query}%"),
                     ),
                 )
-                .order_by(desc(Transaction.created_at))
-                .limit(limit)
             )
+
+            if profile and profile in ("PF", "PJ"):
+                stmt = stmt.where(
+                    Transaction.profile == TransactionProfile(profile)
+                )
+
+            stmt = stmt.order_by(desc(Transaction.created_at)).limit(limit)
             result = await session.execute(stmt)
             transactions = result.scalars().all()
 
@@ -208,6 +226,9 @@ class TransactionService:
                 )
                 tx.category_id = category.id
 
+            if "profile" in updates and updates["profile"] in ("PF", "PJ"):
+                tx.profile = TransactionProfile(updates["profile"])
+
             tx.updated_at = datetime.utcnow()
             await session.commit()
 
@@ -225,5 +246,38 @@ class TransactionService:
             "category_name": tx.category.name if tx.category else None,
             "category_emoji": tx.category.emoji if tx.category else "📦",
             "receipt_url": tx.receipt_url,
+            "profile": tx.profile.value if tx.profile else "PF",
             "created_at": tx.created_at,
         }
+
+    async def _resolve_profile(
+        self, session, user_id: str, profile: str | None
+    ) -> TransactionProfile:
+        """Retorna o perfil informado ou o padrão do usuário."""
+        if profile and profile in ("PF", "PJ"):
+            return TransactionProfile(profile)
+
+        result = await session.execute(
+            select(User.default_profile).where(User.id == UUID(user_id))
+        )
+        row = result.scalar_one_or_none()
+        if row:
+            return row
+        return TransactionProfile.PF
+
+    async def set_user_default_profile(
+        self, user_id: str, profile: str
+    ) -> bool:
+        """Atualiza o perfil padrão do usuário."""
+        if profile not in ("PF", "PJ"):
+            return False
+        async with async_session() as session:
+            result = await session.execute(
+                select(User).where(User.id == UUID(user_id))
+            )
+            user = result.scalar_one_or_none()
+            if not user:
+                return False
+            user.default_profile = TransactionProfile(profile)
+            await session.commit()
+            return True

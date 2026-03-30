@@ -10,6 +10,11 @@ class TransactionTypeEnum(str, Enum):
     EXPENSE = "EXPENSE"
 
 
+class ProfileEnum(str, Enum):
+    PF = "PF"
+    PJ = "PJ"
+
+
 class TransactionCreate(BaseModel):
     type: TransactionTypeEnum
     amount: float
@@ -17,6 +22,7 @@ class TransactionCreate(BaseModel):
     date: date = None
     category_name: Optional[str] = None
     receipt_url: Optional[str] = None
+    profile: Optional[ProfileEnum] = None
 
 
 class TransactionUpdate(BaseModel):
@@ -24,6 +30,7 @@ class TransactionUpdate(BaseModel):
     description: Optional[str] = None
     date: Optional[date] = None
     category_name: Optional[str] = None
+    profile: Optional[ProfileEnum] = None
 
 
 class TransactionResponse(BaseModel):
@@ -35,6 +42,7 @@ class TransactionResponse(BaseModel):
     category_name: Optional[str] = None
     category_emoji: Optional[str] = None
     receipt_url: Optional[str] = None
+    profile: str = "PF"
     created_at: datetime
 
     class Config:

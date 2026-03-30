@@ -11,6 +11,7 @@ async def editar_lancamento(
     nova_categoria: str = None,
     nova_descricao: str = None,
     nova_data: str = None,
+    novo_perfil: str = None,
 ) -> str:
     """Edita um lançamento existente do usuário."""
     service = TransactionService()
@@ -50,6 +51,13 @@ async def editar_lancamento(
             )
         except ValueError:
             return "❌ Data inválida. Use o formato YYYY-MM-DD."
+
+    if novo_perfil:
+        if novo_perfil.upper() not in ("PF", "PJ"):
+            return "❌ Perfil inválido. Use 'PF' ou 'PJ'."
+        updates["profile"] = novo_perfil.upper()
+        old_profile = transaction.get("profile", "PF")
+        changes.append(f"🏷️ Perfil: {old_profile} → {novo_perfil.upper()}")
 
     if not updates:
         return "❌ Nenhuma alteração informada."

@@ -3,12 +3,13 @@ from datetime import datetime, date
 from enum import Enum as PyEnum
 
 from sqlalchemy import (
-    Column, String, DateTime, Boolean, Enum, Date, Text
+    Column, String, DateTime, Boolean, Enum, Date, Text, ForeignKey
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.config.database import Base
+from app.models.transaction import TransactionProfile
 
 
 class LicenseType(PyEnum):
@@ -30,6 +31,12 @@ class User(Base):
     license_expires_at = Column(Date, nullable=True)
     is_active = Column(Boolean, default=True)
     abacatepay_customer_id = Column(String(100), nullable=True)
+    default_profile = Column(
+        Enum(TransactionProfile),
+        nullable=False,
+        default=TransactionProfile.PF,
+        server_default="PF",
+    )
 
     # Admin panel columns (contacts)
     email = Column(Text, nullable=True)

@@ -11,7 +11,7 @@ from sqlalchemy import select, func, desc, case
 from sqlalchemy.orm import selectinload
 
 from app.config.database import async_session
-from app.models.transaction import Transaction, TransactionType
+from app.models.transaction import Transaction, TransactionType, TransactionProfile
 from app.models.category import Category
 
 
@@ -23,22 +23,28 @@ class ReportService:
         user_id: str,
         start_date: date,
         end_date: date,
+        profile: str = None,
     ) -> dict:
-        """Relatório financeiro por período."""
+        """Relatório financeiro por período. Se 'profile' for None, retorna consolidado com breakdown."""
         async with async_session() as session:
             uid = UUID(user_id)
+
+            base_where = [
+                Transaction.user_id == uid,
+                Transaction.deleted_at.is_(None),
+                Transaction.date >= start_date,
+                Transaction.date <= end_date,
+            ]
+
+            if profile and profile in ("PF", "PJ"):
+                base_where.append(Transaction.profile == TransactionProfile(profile))
 
             # Totais por tipo
             totals_stmt = select(
                 Transaction.type,
                 func.sum(Transaction.amount).label("total"),
                 func.count(Transaction.id).label("count"),
-            ).where(
-                Transaction.user_id == uid,
-                Transaction.deleted_at.is_(None),
-                Transaction.date >= start_date,
-                Transaction.date <= end_date,
-            ).group_by(Transaction.type)
+            ).where(*base_where).group_by(Transaction.type)
 
             result = await session.execute(totals_stmt)
             rows = result.all()
@@ -65,13 +71,7 @@ class ReportService:
                     func.count(Transaction.id).label("count"),
                 )
                 .join(Category, Transaction.category_id == Category.id, isouter=True)
-                .where(
-                    Transaction.user_id == uid,
-                    Transaction.deleted_at.is_(None),
-                    Transaction.type == TransactionType.EXPENSE,
-                    Transaction.date >= start_date,
-                    Transaction.date <= end_date,
-                )
+                .where(*base_where, Transaction.type == TransactionType.EXPENSE)
                 .group_by(Category.name, Category.emoji)
                 .order_by(desc(func.sum(Transaction.amount)))
             )
@@ -87,7 +87,7 @@ class ReportService:
                 for row in cat_result.all()
             ]
 
-            return {
+            report = {
                 "total_income": total_income,
                 "total_expense": total_expense,
                 "balance": total_income - total_expense,
@@ -95,12 +95,21 @@ class ReportService:
                 "by_category": by_category,
             }
 
+            # Breakdown por perfil quando não filtrado
+            if not profile:
+                report["by_profile"] = await self._profile_breakdown(
+                    session, uid, start_date, end_date
+                )
+
+            return report
+
     async def generate_category_report(
         self,
         user_id: str,
         start_date: date,
         end_date: date,
         category_filter: str = None,
+        profile: str = None,
     ) -> list[dict]:
         """Relatório agrupado por categoria."""
         async with async_session() as session:
@@ -123,6 +132,9 @@ class ReportService:
                     Transaction.date <= end_date,
                 )
             )
+
+            if profile and profile in ("PF", "PJ"):
+                stmt = stmt.where(Transaction.profile == TransactionProfile(profile))
 
             if category_filter:
                 stmt = stmt.where(Category.name.ilike(f"%{category_filter}%"))
@@ -178,18 +190,23 @@ class ReportService:
 
             return categories
 
-    async def get_balance(self, user_id: str) -> dict:
-        """Retorna o saldo geral (entradas - saídas)."""
+    async def get_balance(self, user_id: str, profile: str = None) -> dict:
+        """Retorna o saldo geral (entradas - saídas). Se profile=None, inclui breakdown."""
         async with async_session() as session:
             uid = UUID(user_id)
+
+            base_where = [
+                Transaction.user_id == uid,
+                Transaction.deleted_at.is_(None),
+            ]
+
+            if profile and profile in ("PF", "PJ"):
+                base_where.append(Transaction.profile == TransactionProfile(profile))
 
             stmt = select(
                 Transaction.type,
                 func.sum(Transaction.amount).label("total"),
-            ).where(
-                Transaction.user_id == uid,
-                Transaction.deleted_at.is_(None),
-            ).group_by(Transaction.type)
+            ).where(*base_where).group_by(Transaction.type)
 
             result = await session.execute(stmt)
             rows = result.all()
@@ -203,8 +220,61 @@ class ReportService:
                 else:
                     total_expense = float(row.total) if row.total else 0.0
 
-            return {
+            balance_data = {
                 "total_income": total_income,
                 "total_expense": total_expense,
                 "balance": total_income - total_expense,
             }
+
+            if not profile:
+                balance_data["by_profile"] = await self._profile_breakdown(
+                    session, uid
+                )
+
+            return balance_data
+
+    async def _profile_breakdown(
+        self,
+        session,
+        uid: UUID,
+        start_date: date = None,
+        end_date: date = None,
+    ) -> dict:
+        """Agrega totais separados por PF e PJ."""
+        stmt = select(
+            Transaction.profile,
+            Transaction.type,
+            func.sum(Transaction.amount).label("total"),
+        ).where(
+            Transaction.user_id == uid,
+            Transaction.deleted_at.is_(None),
+        )
+
+        if start_date:
+            stmt = stmt.where(Transaction.date >= start_date)
+        if end_date:
+            stmt = stmt.where(Transaction.date <= end_date)
+
+        stmt = stmt.group_by(Transaction.profile, Transaction.type)
+        result = await session.execute(stmt)
+        rows = result.all()
+
+        breakdown: dict[str, dict] = {
+            "PF": {"total_income": 0.0, "total_expense": 0.0, "balance": 0.0},
+            "PJ": {"total_income": 0.0, "total_expense": 0.0, "balance": 0.0},
+        }
+
+        for row in rows:
+            prof_key = row.profile.value if row.profile else "PF"
+            amount = float(row.total) if row.total else 0.0
+            if row.type == TransactionType.INCOME:
+                breakdown[prof_key]["total_income"] += amount
+            else:
+                breakdown[prof_key]["total_expense"] += amount
+
+        for prof in breakdown:
+            breakdown[prof]["balance"] = (
+                breakdown[prof]["total_income"] - breakdown[prof]["total_expense"]
+            )
+
+        return breakdown

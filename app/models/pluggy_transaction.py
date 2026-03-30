@@ -33,6 +33,7 @@ class PluggyTransaction(Base):
     )
     payment_method = Column(String(50), nullable=True)  # PIX, TED, DOC, BOLETO
     currency_code = Column(String(10), default="BRL")
+    profile = Column(String(2), nullable=False, default="PF", server_default="PF")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships

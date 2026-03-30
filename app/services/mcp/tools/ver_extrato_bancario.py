@@ -10,9 +10,14 @@ async def ver_extrato_bancario(
     banco: str = None,
     periodo: str = None,
     quantidade: int = 10,
+    perfil: str = None,
 ) -> str:
     """Mostra o extrato bancário com transações importadas via Open Finance."""
 
+    if perfil and perfil.upper() not in ("PF", "PJ"):
+        return "❌ Perfil inválido. Use 'PF' ou 'PJ'."
+
+    profile_filter = perfil.upper() if perfil else None
     sync_service = PluggySyncService()
 
     # Resolver período
@@ -29,27 +34,42 @@ async def ver_extrato_bancario(
             bank_accounts = [
                 a for a in accounts if str(a.pluggy_item_id) == str(item.id)
             ]
+            # Se filtro de perfil, filtrar também as contas
+            if profile_filter:
+                bank_accounts = [a for a in bank_accounts if a.profile == profile_filter]
             if bank_accounts:
                 account_id = str(bank_accounts[0].id)
         else:
             return f"❌ Banco \"{banco}\" não encontrado nas suas conexões."
 
-    transactions = await sync_service.get_user_transactions(
-        user_id=user_id,
-        account_id=account_id,
-        date_from=date_from,
-        date_to=date_to,
-        limit=quantidade,
-    )
+    if profile_filter and not banco:
+        # Buscar diretamente por perfil
+        transactions = await sync_service.get_user_transactions_by_profile(
+            user_id=user_id,
+            profile=profile_filter,
+            date_from=date_from,
+            date_to=date_to,
+            limit=quantidade,
+        )
+    else:
+        transactions = await sync_service.get_user_transactions(
+            user_id=user_id,
+            account_id=account_id,
+            date_from=date_from,
+            date_to=date_to,
+            limit=quantidade,
+        )
 
     if not transactions:
+        perfil_label = f" [{profile_filter}]" if profile_filter else ""
         return (
-            f"📭 Nenhuma transação encontrada{bank_label} "
+            f"💭 Nenhuma transação encontrada{bank_label}{perfil_label} "
             f"no período ({periodo_label}).\n\n"
             f"Envie \"sincronizar banco\" para atualizar os dados."
         )
 
-    lines = [f"📊 Extrato bancário{bank_label} ({periodo_label}):\n"]
+    perfil_label = f" [{profile_filter}]" if profile_filter else ""
+    lines = [f"📊 Extrato bancário{bank_label}{perfil_label} ({periodo_label}):\n"]
 
     total_in = 0
     total_out = 0

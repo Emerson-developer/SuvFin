@@ -17,6 +17,7 @@ from app.services.mcp.tools.ver_contas_bancarias import ver_contas_bancarias
 from app.services.mcp.tools.ver_extrato_bancario import ver_extrato_bancario
 from app.services.mcp.tools.sincronizar_banco import sincronizar_banco
 from app.services.mcp.tools.desconectar_banco import desconectar_banco
+from app.services.mcp.tools.definir_perfil_padrao import definir_perfil_padrao
 
 
 # Definição das tools para o Anthropic API (tool_use)
@@ -44,6 +45,11 @@ TOOL_DEFINITIONS = [
                     "type": "string",
                     "description": "Data no formato YYYY-MM-DD. Se não informada, usar hoje.",
                 },
+                "perfil": {
+                    "type": "string",
+                    "enum": ["PF", "PJ"],
+                    "description": "Perfil do gasto: PF (pessoal) ou PJ (empresarial). Se omitido, usa o perfil padrão do usuário.",
+                },
             },
             "required": ["user_id", "valor"],
         },
@@ -59,6 +65,11 @@ TOOL_DEFINITIONS = [
                 "categoria": {"type": "string"},
                 "descricao": {"type": "string"},
                 "data": {"type": "string"},
+                "perfil": {
+                    "type": "string",
+                    "enum": ["PF", "PJ"],
+                    "description": "Perfil da receita: PF (pessoal) ou PJ (empresarial).",
+                },
             },
             "required": ["user_id", "valor"],
         },
@@ -102,13 +113,18 @@ TOOL_DEFINITIONS = [
                 "nova_categoria": {"type": "string"},
                 "nova_descricao": {"type": "string"},
                 "nova_data": {"type": "string"},
+                "novo_perfil": {
+                    "type": "string",
+                    "enum": ["PF", "PJ"],
+                    "description": "Novo perfil do lançamento: PF ou PJ.",
+                },
             },
             "required": ["user_id", "lancamento_id"],
         },
     },
     {
         "name": "relatorio_periodo",
-        "description": "Gera relatório financeiro por período (semana, mês, ano, ou datas específicas).",
+        "description": "Gera relatório financeiro por período (semana, mês, ano, ou datas específicas). Sem filtro de perfil mostra breakdown PF vs PJ.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -119,6 +135,11 @@ TOOL_DEFINITIONS = [
                 },
                 "data_inicio": {"type": "string"},
                 "data_fim": {"type": "string"},
+                "perfil": {
+                    "type": "string",
+                    "enum": ["PF", "PJ"],
+                    "description": "Filtrar por perfil. Se omitido, retorna relatório consolidado com breakdown PF/PJ.",
+                },
             },
             "required": ["user_id"],
         },
@@ -141,11 +162,16 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "saldo_atual",
-        "description": "Retorna o saldo atual do usuário (total de entradas - total de saídas).",
+        "description": "Retorna o saldo atual do usuário. Sem filtro de perfil mostra saldo total com breakdown PF/PJ.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "user_id": {"type": "string"},
+                "perfil": {
+                    "type": "string",
+                    "enum": ["PF", "PJ"],
+                    "description": "Filtrar por perfil: PF (pessoal) ou PJ (empresarial).",
+                },
             },
             "required": ["user_id"],
         },
@@ -161,6 +187,11 @@ TOOL_DEFINITIONS = [
                 "tipo": {
                     "type": "string",
                     "description": "INCOME, EXPENSE ou ambos",
+                },
+                "perfil": {
+                    "type": "string",
+                    "enum": ["PF", "PJ"],
+                    "description": "Filtrar por perfil: PF (pessoal) ou PJ (empresarial).",
                 },
             },
             "required": ["user_id"],
@@ -207,6 +238,11 @@ TOOL_DEFINITIONS = [
             "type": "object",
             "properties": {
                 "user_id": {"type": "string"},
+                "perfil": {
+                    "type": "string",
+                    "enum": ["PF", "PJ"],
+                    "description": "Perfil da conta: PF (pessoal, padrão) ou PJ (empresarial).",
+                },
             },
             "required": ["user_id"],
         },
@@ -229,7 +265,7 @@ TOOL_DEFINITIONS = [
         "name": "ver_extrato_bancario",
         "description": (
             "Mostra o extrato bancário com transações importadas via Open Finance. "
-            "Pode filtrar por banco, período e quantidade."
+            "Pode filtrar por banco, período, quantidade e perfil PF/PJ."
         ),
         "input_schema": {
             "type": "object",
@@ -247,6 +283,11 @@ TOOL_DEFINITIONS = [
                     "type": "integer",
                     "description": "Número de transações a exibir (default 10)",
                     "default": 10,
+                },
+                "perfil": {
+                    "type": "string",
+                    "enum": ["PF", "PJ"],
+                    "description": "Filtrar por perfil: PF (pessoal) ou PJ (empresarial).",
                 },
             },
             "required": ["user_id"],
@@ -292,6 +333,26 @@ TOOL_DEFINITIONS = [
             "required": ["user_id"],
         },
     },
+    {
+        "name": "definir_perfil_padrao",
+        "description": (
+            "Define o perfil padrão do usuário para lançamentos futuros. "
+            "Use quando o usuário disser que quer mudar para modo PJ, ativar perfil empresarial, "
+            "ou voltar para modo pessoal/PF."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "user_id": {"type": "string"},
+                "perfil": {
+                    "type": "string",
+                    "enum": ["PF", "PJ"],
+                    "description": "'PF' para pessoal ou 'PJ' para empresarial",
+                },
+            },
+            "required": ["user_id", "perfil"],
+        },
+    },
 ]
 
 
@@ -312,4 +373,5 @@ TOOL_HANDLERS = {
     "ver_extrato_bancario": ver_extrato_bancario,
     "sincronizar_banco": sincronizar_banco,
     "desconectar_banco": desconectar_banco,
+    "definir_perfil_padrao": definir_perfil_padrao,
 }

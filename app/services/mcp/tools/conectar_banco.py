@@ -7,8 +7,13 @@ from app.services.pluggy.sync_service import PluggySyncService
 from sqlalchemy import select
 
 
-async def conectar_banco(user_id: str) -> str:
+async def conectar_banco(user_id: str, perfil: str = "PF") -> str:
     """Gera link do Pluggy Connect para o usuário conectar sua conta bancária."""
+
+    if perfil.upper() not in ("PF", "PJ"):
+        return "❌ Perfil inválido. Use 'PF' para conta pessoal ou 'PJ' para conta empresarial."
+
+    profile = perfil.upper()
 
     # Verificar se o usuário existe e tem plano pago
     async with async_session() as session:
@@ -54,10 +59,12 @@ async def conectar_banco(user_id: str) -> str:
 
     connect_url = f"https://connect.pluggy.ai/?connect_token={token}"
 
+    profile_label = "empresarial (PJ)" if profile == "PJ" else "pessoal (PF)"
     return (
-        f"🏦 Para conectar seu banco, acesse o link abaixo:\n\n"
+        f"🏦 Para conectar sua conta {profile_label}, acesse o link abaixo:\n\n"
         f"{connect_url}\n\n"
         f"⏱️ O link expira em 30 minutos.\n"
         f"📱 Abra no navegador do celular, escolha seu banco e siga as instruções.\n\n"
-        f"Após conectar, seus dados serão importados automaticamente!"
+        f"Após conectar, seus dados serão importados automaticamente "
+        f"como {profile_label.upper()}!"
     )
