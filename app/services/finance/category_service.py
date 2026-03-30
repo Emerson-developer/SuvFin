@@ -81,6 +81,77 @@ class CategoryService:
                 for cat in categories
             ]
 
+    async def create_custom(
+        self,
+        session: AsyncSession,
+        user_id: str,
+        name: str,
+        emoji: Optional[str] = None,
+    ) -> Category:
+        """Cria uma categoria personalizada para o usuário.
+
+        Raises:
+            ValueError: Se já existe uma categoria com esse nome (padrão ou do usuário).
+        """
+        # Verificar duplicata
+        stmt = select(Category).where(
+            Category.name.ilike(name),
+            or_(
+                Category.user_id.is_(None),
+                Category.user_id == UUID(user_id),
+            ),
+        )
+        result = await session.execute(stmt)
+        if result.scalar_one_or_none():
+            raise ValueError(f"Já existe uma categoria com o nome '{name}'.")
+
+        category = Category(
+            name=name.title(),
+            emoji=emoji or "📦",
+            is_default=False,
+            user_id=UUID(user_id),
+        )
+        session.add(category)
+        await session.flush()
+        return category
+
+    async def delete_custom(
+        self,
+        session: AsyncSession,
+        user_id: str,
+        name: str,
+    ) -> bool:
+        """Remove uma categoria personalizada do usuário.
+
+        Returns:
+            True se removida, False se não encontrada.
+        Raises:
+            ValueError: Se a categoria for padrão (não pode ser removida).
+        """
+        # Checar se existe como padrão
+        default_stmt = select(Category).where(
+            Category.name.ilike(name),
+            Category.user_id.is_(None),
+        )
+        result = await session.execute(default_stmt)
+        if result.scalar_one_or_none():
+            raise ValueError("Categorias padrão não podem ser removidas.")
+
+        # Buscar categoria custom do usuário
+        custom_stmt = select(Category).where(
+            Category.name.ilike(name),
+            Category.user_id == UUID(user_id),
+            Category.is_default.is_(False),
+        )
+        result = await session.execute(custom_stmt)
+        category = result.scalar_one_or_none()
+
+        if not category:
+            return False
+
+        await session.delete(category)
+        return True
+
     async def seed_defaults(self):
         """Cria as categorias padrão no banco (rodar 1x no setup)."""
         async with async_session() as session:

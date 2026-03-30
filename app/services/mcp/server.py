@@ -11,6 +11,8 @@ from app.services.mcp.tools.relatorio_categoria import relatorio_categoria
 from app.services.mcp.tools.saldo_atual import saldo_atual
 from app.services.mcp.tools.ultimos_lancamentos import ultimos_lancamentos
 from app.services.mcp.tools.listar_categorias import listar_categorias
+from app.services.mcp.tools.criar_categoria import criar_categoria
+from app.services.mcp.tools.remover_categoria import remover_categoria
 from app.services.mcp.tools.processar_comprovante import processar_comprovante
 from app.services.mcp.tools.conectar_banco import conectar_banco
 from app.services.mcp.tools.ver_contas_bancarias import ver_contas_bancarias
@@ -199,13 +201,53 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "listar_categorias",
-        "description": "Lista todas as categorias disponíveis para o usuário.",
+        "description": "Lista todas as categorias disponíveis para o usuário (padrão + personalizadas).",
         "input_schema": {
             "type": "object",
             "properties": {
                 "user_id": {"type": "string"},
             },
             "required": ["user_id"],
+        },
+    },
+    {
+        "name": "criar_categoria",
+        "description": (
+            "Cria uma categoria personalizada para o usuário. "
+            "Use quando ele quiser adicionar uma nova categoria que não existe na lista padrão."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "user_id": {"type": "string"},
+                "nome": {
+                    "type": "string",
+                    "description": "Nome da nova categoria",
+                },
+                "emoji": {
+                    "type": "string",
+                    "description": "Emoji para representar a categoria (opcional)",
+                },
+            },
+            "required": ["user_id", "nome"],
+        },
+    },
+    {
+        "name": "remover_categoria",
+        "description": (
+            "Remove uma categoria personalizada do usuário. "
+            "Não é possível remover categorias padrão do sistema."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "user_id": {"type": "string"},
+                "nome": {
+                    "type": "string",
+                    "description": "Nome da categoria a remover",
+                },
+            },
+            "required": ["user_id", "nome"],
         },
     },
     {
@@ -367,6 +409,8 @@ TOOL_HANDLERS = {
     "saldo_atual": saldo_atual,
     "ultimos_lancamentos": ultimos_lancamentos,
     "listar_categorias": listar_categorias,
+    "criar_categoria": criar_categoria,
+    "remover_categoria": remover_categoria,
     "processar_comprovante": processar_comprovante,
     "conectar_banco": conectar_banco,
     "ver_contas_bancarias": ver_contas_bancarias,
