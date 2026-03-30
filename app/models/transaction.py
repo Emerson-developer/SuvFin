@@ -37,7 +37,7 @@ class Transaction(Base):
     )
     receipt_url = Column(Text, nullable=True)
     profile = Column(
-        Enum(TransactionProfile),
+        Enum(TransactionProfile, name="profile_type"),
         nullable=False,
         default=TransactionProfile.PF,
         server_default="PF",

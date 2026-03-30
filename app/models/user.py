@@ -32,7 +32,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     abacatepay_customer_id = Column(String(100), nullable=True)
     default_profile = Column(
-        Enum(TransactionProfile),
+        Enum(TransactionProfile, name="profile_type"),
         nullable=False,
         default=TransactionProfile.PF,
         server_default="PF",
