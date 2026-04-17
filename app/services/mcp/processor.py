@@ -145,16 +145,18 @@ class MCPProcessor:
         message_type: str,
         content: str,
         name: str = "Usuário",
+        is_paid_user: bool = False,
     ) -> MCPResponse:
         """Processa uma mensagem e retorna a resposta."""
 
-        # Rate limiting por usuário
-        rate_check = await self._check_user_rate_limit(phone)
-        if not rate_check["allowed"]:
-            return MCPResponse(
-                text=rate_check["message"],
-                tokens_used={"input": 0, "output": 0, "blocked": True},
-            )
+        # Rate limiting — apenas para usuários do plano gratuito
+        if not is_paid_user:
+            rate_check = await self._check_user_rate_limit(phone)
+            if not rate_check["allowed"]:
+                return MCPResponse(
+                    text=rate_check["message"],
+                    tokens_used={"input": 0, "output": 0, "blocked": True},
+                )
 
         # Verificar cache para mensagens de texto
         if message_type == "text":

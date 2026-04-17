@@ -67,9 +67,12 @@ def _detect_plan_selection(text: str) -> tuple[str, str] | None:
     t = t.replace("á", "a").replace("é", "e").replace("í", "i")
 
     # Detectar período (agora só temos Mensal e Anual)
-    if re.search(r"\banual\b|\banuais\b|\bano\b|\bannual\b", t):
+    if re.search(r"\banual\b|\banuais\b|\bannual\b", t):
         return ("PRO", "ANNUAL")
-    elif re.search(r"\bmensal\b|\bmes\b|\bpro\b|\bassinar\b|\bquero\b", t):
+    # Evitar falsos positivos com palavras comuns do português:
+    # "mês" (normalizado para "mes") e "pro" (= "para o") são muito comuns.
+    # Só ativar quando há intenção clara de assinar/pagar.
+    elif re.search(r"\bplano\s+mensal\b|\bmensal\b|\bassinar\b|\bquero\s+(o\s+)?mensal\b|\bquero\s+(o\s+)?plano\b", t):
         return ("PRO", "MONTHLY")
 
     return None
@@ -89,9 +92,6 @@ def _is_plan_inquiry(text: str) -> bool:
         r"\bupgrade\b",
         r"\bassinatura\b",
         r"\bassinar\b",
-        r"\bpagos?\b",
-        r"\bprecos?\b",
-        r"\bvalores?\b",
         r"\bquanto\s+custa\b",
         r"\bmudar\s+plano\b",
         r"\btrocar\s+plano\b",
@@ -102,8 +102,6 @@ def _is_plan_inquiry(text: str) -> bool:
         r"\bconhecer\s+(os\s+)?planos?\b",
         r"\bquais\s+(sao\s+)?(os\s+)?planos?\b",
         r"\bopcoes\s+de\s+plano\b",
-        r"\bplano\s+pago\b",
-        r"\bplanos\s+pagos\b",
         r"\bplanos\s+disponiveis\b",
     ]
 
@@ -354,15 +352,25 @@ async def _process_webhook(payload: dict):
 
     # ── Usuário ativo perguntando sobre planos/upgrade ──
     if msg_type == "text" and isinstance(content, str):
-        # Primeiro checar se está selecionando um plano específico
-        selected = _detect_plan_selection(content)
-        if selected:
-            plan, period = selected
-            await _handle_plan_selection(phone, f"plan_{plan.lower()}_{period.lower()}", client)
-            return
+        # Usuários com plano pago ativo NÃO recebem link de cobrança.
+        # Apenas FREE_TRIAL pode ser encaminhado para seleção de plano.
+        from app.models.user import LicenseType as _LicenseType
+        is_paid_user = user.license_type in (
+            _LicenseType.PRO, _LicenseType.BASICO, _LicenseType.PREMIUM
+        )
 
-        # Depois checar se está perguntando sobre planos em geral
-        if _is_plan_inquiry(content):
+        if not is_paid_user:
+            # Só tenta detectar seleção de plano para usuários não-pagos
+            selected = _detect_plan_selection(content)
+            if selected:
+                plan, period = selected
+                await _handle_plan_selection(phone, f"plan_{plan.lower()}_{period.lower()}", client)
+                return
+
+        # Checar se está perguntando sobre planos em geral
+        # Usuários com plano pago ativo não recebem lista de upgrade —
+        # a LLM responde normalmente via MCP com info do plano atual.
+        if not is_paid_user and _is_plan_inquiry(content):
             await _send_plan_list_active_user(phone, user, client)
             return
 
@@ -379,6 +387,8 @@ async def _process_webhook(payload: dict):
     )
 
     # Processar com MCP + LLM
+    from app.models.user import LicenseType as _LT
+    _is_paid = user.license_type in (_LT.PRO, _LT.BASICO, _LT.PREMIUM)
     processor = MCPProcessor()
     response = await processor.process(
         user_id=str(user.id),
@@ -386,6 +396,7 @@ async def _process_webhook(payload: dict):
         message_type=msg_type,
         content=content,
         name=name,
+        is_paid_user=_is_paid,
     )
 
     # Enviar resposta
